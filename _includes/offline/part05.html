@@ -1,0 +1,1044 @@
+{% raw %} class="beta-field">
+        具体发生了什么
+        <textarea id="feedbackDetails" rows="4" placeholder="尽量写清楚操作步骤、具体单词、题目或页面位置。"></textarea>
+      </label>
+      <label class="beta-field">
+        期望怎样改进
+        <textarea id="feedbackExpected" rows="3" placeholder="例如：更换为经过人工审听的英式女声录音。"></textarea>
+      </label>
+
+      <p style="font-size:12px;color:var(--muted)">反馈仅保存在当前浏览器，不会自动发送给站主。保存后可在“使用反馈”页导出并分享；清理浏览器前请备份。</p>
+      <button class="primary-btn feedback-submit" id="submitFeedback" type="button">保存到本机</button>
+      <div class="feedback-status" id="feedbackStatus" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="ai-dock">
+    <div class="ai-panel" id="aiPanel">
+      <h4>🤖 单元知识提示</h4>
+      <small style="color:var(--muted)">按已整理的单元知识提供提示，未接入开放式 AI 问答。</small>
+      <p style="font-size:12px;color:var(--muted)">仅提供已整理的课程与阅读提示，不能进行开放式 AI 答疑或自动批改。</p>
+      <div class="ai-log" id="aiLog">
+        <div class="ai-msg">你好！今天我们正在学习 Unit 1。你可以问我单词、语法或阅读问题。</div>
+      </div>
+      <div class="ai-input">
+        <input id="aiInput" placeholder="输入你的问题">
+        <button id="aiSend">发送</button>
+      </div>
+    </div>
+    <button class="ai-toggle" id="aiToggle" aria-label="打开单元知识提示">🤖</button>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;background:#243a35;color:white;padding:12px 18px;border-radius:999px;transition:.25s;z-index:100"></div>
+</div>
+
+<script data-bundled-src="learning-core.js">
+(function (root) {
+  'use strict';
+  const record = value => !!value && typeof value === 'object' && !Array.isArray(value);
+  const modes = {
+    standard: {minutes:35, tasks:['vocab','lesson','reading','speaking','review'], times:[8,10,10,5,2]},
+    light: {minutes:18, tasks:['vocab','lesson','reading','speaking'], times:[5,6,4,3]}
+  };
+  function mode(value) { return modes[value === 'light' ? 'light' : 'standard']; }
+  function dayKey(value = new Date()) {
+    const d = new Date(value);
+    if (!Number.isFinite(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+  }
+  function progress(tasks, selectedMode) {
+    const keys = mode(selectedMode).tasks;
+    const done = keys.filter(key => tasks?.[key] === true).length;
+    return {done,total:keys.length,percent:Math.round(done / keys.length * 100)};
+  }
+  const kinds=['listening','vocabulary','grammar','reading'];
+  const taskKeys=modes.standard.tasks;
+  const dated=value=>typeof value==='string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && dayKey(value+'T04:00:00Z')===value;
+  const timestamp=value=>typeof value==='string' && Number.isFinite(Date.parse(value));
+  const identity=value=>typeof value==='string' && value.length>0;
+  const answers=value=>Array.isArray(value) && value.length<=5 && value.every(x=>x==null || (Number.isInteger(x)&&x>=0&&x<4));
+  const checks=value=>Array.isArray(value) && value.length<=5 && value.every(x=>x==null||typeof x==='boolean');
+  const validTasks=value=>record(value) && Object.entries(value).every(([k,v])=>k==='_date'?dated(v):k==='_unit'?typeof v==='string'&&/^[789][ab]-u\d+$/.test(v):taskKeys.includes(k)&&typeof v==='boolean');
+  const validDay=value=>record(value)&&validTasks(value.tasks)&&(value.reflection===undefined||typeof value.reflection==='string')&&(value.mode===undefined||['light','standard'].includes(value.mode));
+  const validAttempt=a=>record(a)&&identity(a.id)&&kinds.includes(a.kind)&&timestamp(a.at)&&Number.isInteger(a.correct)&&a.total===5&&a.correct>=0&&a.correct<=a.total&&(a.answers===undefined||(answers(a.answers)&&a.answers.length===5&&a.answers.every(Number.isInteger)))&&(a.assisted===undefined||typeof a.assisted==='boolean');
+  const validQuiz=d=>record(d)&&identity(d.id)&&answers(d.answers)&&(d.checks===undefined||checks(d.checks))&&(d.submitted===undefined||typeof d.submitted==='boolean')&&(d.assisted===undefined||typeof d.assisted==='boolean')&&(d.showTranscript===undefined||typeof d.showTranscript==='boolean')&&(!d.submitted||(Number.isInteger(d.correct)&&d.correct>=0&&d.correct<=5&&d.answers.length===5&&d.answers.every(Number.isInteger)));
+  const validSpeaking=r=>record(r)&&identity(r.id)&&timestamp(r.at)&&r.type==='self-check';
+  const validWriting=r=>record(r)&&identity(r.id)&&timestamp(r.at)&&typeof r.text==='string'&&Array.isArray(r.checks)&&r.checks.length===5&&r.checks.every(x=>typeof x==='boolean');
+  const validDraft=(k,v)=>k==='parent'?record(v)&&Object.values(v).every(x=>typeof x==='string'):typeof v==='string';
+  function validateState(s) {
+    const fail=()=>{throw new Error('学习记录包含损坏的答题、草稿或自查数据，请选择完整的备份。');};
+    if(!record(s)||(s.version!==undefined&&s.version!==1))fail();
+    for(const [field,valid] of [['attempts',validAttempt],['speaking',validSpeaking],['writing',validWriting]]){
+      if(s[field]!==undefined&&(!Array.isArray(s[field])||s[field].some(x=>!valid(x))))fail();
+    }
+    if(s.days!==undefined&&(!record(s.days)||Object.entries(s.days).some(([k,v])=>!dated(k)||!validDay(v))))fail();
+    if(s.quizDrafts!==undefined&&(!record(s.quizDrafts)||Object.entries(s.quizDrafts).some(([k,v])=>![...kinds,'writing'].includes(k)||!validQuiz(v))))fail();
+    if(s.drafts!==undefined&&(!record(s.drafts)||Object.entries(s.drafts).some(([k,v])=>!validDraft(k,v))))fail();
+    if(s.words!==undefined&&(!Array.isArray(s.words)||s.words.some(x=>typeof x!=='string')))fail();
+    if(s.lastView!==undefined&&typeof s.lastView!=='string')fail();
+    return true;
+  }
+  function normalizeState(value) {
+    const s = record(value) ? value : {};
+    const unique=(list,valid,limit)=>[...new Map((Array.isArray(list)?list:[]).filter(valid).map(r=>[r.id,r])).values()].slice(-limit);
+    return {
+      version:1,
+      days:Object.fromEntries(Object.entries(record(s.days)?s.days:{}).filter(([k,v])=>dated(k)&&validDay(v))),
+      attempts:unique(s.attempts,validAttempt,300),
+      drafts:Object.fromEntries(Object.entries(record(s.drafts)?s.drafts:{}).filter(([k,v])=>validDraft(k,v))),
+      quizDrafts:Object.fromEntries(Object.entries(record(s.quizDrafts)?s.quizDrafts:{}).filter(([k,v])=>[...kinds,'writing'].includes(k)&&validQuiz(v)).map(([k,v])=>[k,{...v,checks:v.checks||[],submitted:!!v.submitted,assisted:!!v.assisted}])),
+      words:Array.isArray(s.words) ? s.words.filter(x => typeof x === 'string') : [],
+      speaking:unique(s.speaking,validSpeaking,300),
+      writing:unique(s.writing,validWriting,100),
+      lastView:typeof s.lastView === 'string' ? s.lastView : 'home'
+    };
+  }
+  function dayRecord(state, day = dayKey()) {
+    if (!record(state.days[day])) state.days[day] = {tasks:{},reflection:''};
+    if (!record(state.days[day].tasks)) state.days[day].tasks = {};
+    return state.days[day];
+  }
+  function sessionDate(session) {return dated(session.learningDate)?session.learningDate:dayKey(session.endAt||session.startAt);}
+  function sessionTasks(state,day,current) {return {...(current?._date===day?current:state.days[day]?.tasks||{})};}
+  function mergeLearningSessions(records,pending) {
+    const unique=new Map((Array.isArray(records)?records:[]).filter(record).map(r=>[r.id||r.endAt||r.startAt,r]));
+    if(record(pending)&&identity(pending.id))unique.set(pending.id,pending);
+    return [...unique.values()].sort((a,b)=>(Date.parse(b.endAt||b.startAt)||0)-(Date.parse(a.endAt||a.startAt)||0));
+  }
+  function latestScores(state) {
+    const scores={listening:null,vocabulary:null,grammar:null,reading:null};
+    [...state.attempts].sort((a,b) => Date.parse(a.at) - Date.parse(b.at)).forEach(a => {
+      if (Object.prototype.hasOwnProperty.call(scores,a.kind) && !(a.kind === 'listening' && a.assisted)) scores[a.kind] = {...a,percent:Math.round(a.correct / a.total * 100)};
+    });
+    return scores;
+  }
+  function summary(state, sessions = [], now = new Date()) {
+    const unique=new Map();
+    sessions.filter(record).forEach(s => {
+      const key=s.id || s.endAt || s.startAt;
+      if(key && !unique.has(key)) unique.set(key,s);
+    });
+    const valid=[...unique.values()];
+    const dates=new Set(valid.map(sessionDate).filter(Boolean));
+    for(const [day,r] of Object.entries(state.days)) if(record(r) && Object.values(r.tasks||{}).some(v=>v===true)) dates.add(day);
+    state.attempts.forEach(a=>{const day=dayKey(a.at);if(day)dates.add(day);});
+    state.speaking.forEach(s=>{const day=dayKey(s.at);if(day)dates.add(day);});
+    const today=dayKey(now);
+    let cursor=new Date(today+'T04:00:00Z');
+    if(!dates.has(today)) cursor.setUTCDate(cursor.getUTCDate()-1);
+    let streak=0;
+    while(dates.has(dayKey(cursor))){streak++;cursor.setUTCDate(cursor.getUTCDate()-1);}
+    const latest=Object.values(latestScores(state)).filter(Boolean);
+    const correct=latest.reduce((n,a)=>n+a.correct,0), answered=latest.reduce((n,a)=>n+a.total,0);
+    return {
+      days:dates.size,streak,
+      durationMs:valid.reduce((n,s)=>n+(Number.isFinite(s.durationMs)&&s.durationMs>0?Math.min(s.durationMs,21600000):0),0),
+      attempts:state.attempts.length,correct,answered,percent:answered?Math.round(correct/answered*100):null,
+      reading:new Set(state.attempts.filter(a=>a.kind==='reading').map(a=>a.contentId||'new-school-day')).size,
+      speaking:state.speaking.length
+    };
+  }
+  const api={mode,dayKey,progress,normalizeState,validateState,validTasks,dayRecord,sessionDate,sessionTasks,mergeLearningSessions,latestScores,summary};
+  if(typeof module !== 'undefined' && module.exports) module.exports=api;
+  root.EnglishCore=api;
+})(typeof window === 'undefined' ? globalThis : window);
+
+</script>
+<script data-bundled-src="curriculum-core.js">
+(function(root){
+  'use strict';
+  const record=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+  const string=x=>typeof x==='string';
+  const identity=x=>string(x)&&/^[a-zA-Z0-9][a-zA-Z0-9_:.-]{0,180}$/.test(x);
+  const timestamp=x=>string(x)&&Number.isFinite(Date.parse(x));
+  const kinds=['vocabulary','grammar','reading','listening'];
+  const taskKeys=['vocab','lesson','reading','speaking','review'];
+  const answers=x=>Array.isArray(x)&&x.length<=5&&x.every(a=>a==null||Number.isInteger(a)&&a>=0&&a<4);
+  const checks=x=>Array.isArray(x)&&x.length<=5&&x.every(a=>typeof a==='boolean'||a==null);
+  const taskMap=x=>record(x)&&Object.entries(x).every(([k,v])=>k==='_date'?/^\d{4}-\d{2}-\d{2}$/.test(v):k==='_unit'?identity(v):taskKeys.includes(k)&&typeof v==='boolean');
+  const quizDraft=x=>record(x)&&identity(x.id)&&answers(x.answers)&&(x.assisted===undefined||typeof x.assisted==='boolean')&&(x.showTranscript===undefined||typeof x.showTranscript==='boolean')&&(x.submitted===undefined||typeof x.submitted==='boolean')&&(!x.submitted||(x.answers.length===5&&x.answers.every(Number.isInteger)));
+  const mistake=x=>record(x)&&['prompt','chosen','answer','explanation'].every(k=>string(x[k]));
+  const attempt=x=>record(x)&&identity(x.id)&&identity(x.key)&&identity(x.unitId)&&kinds.includes(x.kind)&&timestamp(x.at)&&answers(x.answers)&&x.answers.length===5&&x.answers.every(Number.isInteger)&&x.total===5&&Number.isInteger(x.correct)&&x.correct>=0&&x.correct<=5&&(x.assisted===undefined||typeof x.assisted==='boolean')&&(x.variant===undefined||identity(x.variant))&&(x.mistakes===undefined||(Array.isArray(x.mistakes)&&x.mistakes.length<=5&&x.mistakes.every(mistake)));
+  const writing=x=>record(x)&&string(x.text)&&checks(x.checks)&&(x.savedAt===undefined||timestamp(x.savedAt));
+  const speaking=x=>record(x)&&checks(x.checks)&&(x.savedAt===undefined||timestamp(x.savedAt));
+  const selfChecked=(entry,count)=>!!entry?.savedAt&&entry.checks?.length===count&&entry.checks.every(Boolean);
+  const days=x=>record(x)&&Object.entries(x).every(([date,units])=>/^\d{4}-\d{2}-\d{2}$/.test(date)&&record(units)&&Object.entries(units).every(([id,t])=>identity(id)&&taskMap(t)));
+  const validators={quizDrafts:quizDraft,writing,speaking,words:x=>Array.isArray(x)&&x.every(string)};
+  function validate(s){
+    const fail=()=>{throw Error('同步学习记录格式损坏，请选择完整的备份文件。');};
+    if(!record(s)||(s.version!==undefined&&s.version!==1))fail();
+    if(s.attempts!==undefined&&(!Array.isArray(s.attempts)||s.attempts.some(x=>!attempt(x))))fail();
+    for(const [field,valid] of Object.entries(validators))if(s[field]!==undefined&&(!record(s[field])||Object.entries(s[field]).some(([k,v])=>!identity(k)||!valid(v))))fail();
+    if(s.dailyPlans!==undefined&&!days(s.dailyPlans))fail();
+    if(s.selectedUnit!==undefined&&!identity(s.selectedUnit))fail();
+    if(s.selectedBook!==undefined&&!identity(s.selectedBook))fail();
+    return true;
+  }
+  function normalize(value){
+    const s=record(value)?value:{};
+    const n={version:1,selectedBook:identity(s.selectedBook)?s.selectedBook:'7a',selectedUnit:identity(s.selectedUnit)?s.selectedUnit:'7a-u1',attempts:[...new Map((Array.isArray(s.attempts)?s.attempts:[]).filter(attempt).map(a=>[a.id,a])).values()].slice(-3000),dailyPlans:{}};
+    for(const [field,valid] of Object.entries(validators))n[field]=Object.fromEntries(Object.entries(record(s[field])?s[field]:{}).filter(([k,v])=>identity(k)&&valid(v)));
+    for(const [field,count] of [['writing',5],['speaking',3]])for(const [id,entry] of Object.entries(n[field])){
+      const current={...entry,checks:[...entry.checks]};
+      if(!selfChecked(current,count)||(field==='writing'&&!current.text.trim()))delete current.savedAt;
+      n[field][id]=current;
+    }
+    for(const [date,units] of Object.entries(record(s.dailyPlans)?s.dailyPlans:{})){
+      if(/^\d{4}-\d{2}-\d{2}$/.test(date)&&record(units))n.dailyPlans[date]=Object.fromEntries(Object.entries(units).filter(([id,t])=>identity(id)&&taskMap(t)));
+    }
+    return n;
+  }
+  function quizKey(unitId,kind,contentId='main'){return [unitId,kind,contentId].join('::');}
+  function score(questions,choices){
+    if(!Array.isArray(choices)||questions.length!==choices.length||questions.some((q,i)=>!Number.isInteger(choices[i])||choices[i]<0||choices[i]>=q.options.length))throw Error('请先完成全部题目。');
+    const mistakes=questions.map((q,i)=>q.correctIndex===choices[i]?-1:i).filter(i=>i>=0);
+    return {correct:questions.length-mistakes.length,total:questions.length,mistakes};
+  }
+  function latest(s,unitId){
+    const result={vocabulary:null,grammar:null,reading:null,listening:null};
+    [...s.attempts].filter(a=>a.unitId===unitId).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).forEach(a=>{if(!(a.kind==='listening'&&a.assisted))result[a.kind]=a;});
+    return result;
+  }
+  function rememberPlan(s,tasks){
+    if(!taskMap(tasks)||!tasks._date||!tasks._unit)return;
+    if(!s.dailyPlans[tasks._date])s.dailyPlans[tasks._date]={};
+    s.dailyPlans[tasks._date][tasks._unit]={...tasks};
+  }
+  function tasksFor(s,date,unitId){return {...(s.dailyPlans[date]?.[unitId]||{}),_date:date,_unit:unitId};}
+  function progress(s,unit){
+    const tried=kind=>s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind);
+    const triedSet=(kind,id)=>s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind&&a.key===quizKey(unit.id,kind,id));
+    const grammar=(unit.grammarKeys||[]).length?unit.grammarKeys.every(id=>s.attempts.some(a=>a.unitId===unit.id&&a.kind==='grammar'&&a.key===quizKey(unit.id,'grammar',id))):tried('grammar');
+    const vocabulary=unit.vocabulary.every(w=>(s.words[unit.id]||[]).includes(w.word))||(triedSet('vocabulary','set1')&&triedSet('vocabulary','set2'));
+    const complete={vocabulary,grammar,reading:tried('reading'),listening:tried('listening'),speaking:selfChecked(s.speaking[unit.id],3),writing:selfChecked(s.writing[unit.id],5)&&!!s.writing[unit.id].text.trim()};
+    const done=Object.values(complete).filter(Boolean).length;
+    return {done,total:6,percent:Math.round(done/6*100),complete};
+  }
+  function nextActivity(s,unit,onlyKind){
+    const complete=progress(s,unit).complete;
+    const kind=['vocabulary','grammar','reading','listening','speaking','writing'].find(k=>(!onlyKind||k===onlyKind)&&!complete[k]);
+    if(!kind)return {kind:'complete'};
+    if(kind==='vocabulary'||kind==='grammar'){
+      const variants=kind==='vocabulary'?['set1','set2']:unit.grammarKeys||[];
+      const variant=variants.find(id=>!s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind&&a.key===quizKey(unit.id,kind,id)));
+      return {kind,...(variant?{variant}:{})};
+    }
+    return {kind};
+  }
+  function wordCount(text){return (text.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g)||[]).length;}
+  const api={normalize,validate,quizKey,score,latest,rememberPlan,tasksFor,progress,nextActivity,wordCount};
+  if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  root.CurriculumCore=api;
+})(typeof window==='undefined'?globalThis:window);
+
+</script>
+<script data-bundled-src="classics-core.js">
+(function(root){
+  'use strict';
+  const record=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+  const identity=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,180}$/.test(x);
+  const timestamp=x=>typeof x==='string'&&Number.isFinite(Date.parse(x));
+  const choices=x=>Array.isArray(x)&&x.length<=5&&Array.from(x).every(a=>a==null||Number.isInteger(a)&&a>=0&&a<4);
+  const complete=x=>choices(x)&&x.length===5&&Array.from(x).every(Number.isInteger);
+  const draft=x=>record(x)&&choices(x.answers)&&typeof x.submitted==='boolean'&&timestamp(x.at)&&(!x.submitted||complete(x.answers));
+  const result=x=>record(x)&&complete(x.answers)&&x.total===5&&Number.isInteger(x.correct)&&x.correct>=0&&x.correct<=5&&timestamp(x.at);
+  const note=x=>record(x)&&typeof x.text==='string'&&x.text.length<=5000&&timestamp(x.at);
+  const fields={sections:identity,drafts:draft,results:result,notes:note};
+  function validate(s){
+    const fail=()=>{throw Error('读书记录格式损坏，请选择本站导出的完整备份。');};
+    if(!record(s)||(s.version!==undefined&&s.version!==1))fail();
+    if(s.selectedBook!==undefined&&!identity(s.selectedBook))fail();
+    if(s.filterGrade!==undefined&&!['all','7','8','9'].includes(s.filterGrade))fail();
+    for(const [name,valid] of Object.entries(fields)) if(s[name]!==undefined&&(!record(s[name])||Object.entries(s[name]).some(([k,v])=>!identity(k)||!valid(v))))fail();
+    return true;
+  }
+  function normalize(value){
+    const s=record(value)?value:{};
+    const n={version:1,selectedBook:identity(s.selectedBook)?s.selectedBook:'wind-in-the-willows',filterGrade:['all','7','8','9'].includes(s.filterGrade)?s.filterGrade:'7'};
+    for(const [name,valid] of Object.entries(fields))n[name]=Object.fromEntries(Object.entries(record(s[name])?s[name]:{}).filter(([k,v])=>identity(k)&&valid(v)));
+    return n;
+  }
+  function key(bookId,sectionId){return bookId+'::'+sectionId;}
+  function progress(state,book){
+    const done=book.sections.filter(s=>Object.prototype.hasOwnProperty.call(state.results,key(book.id,s.id))).length;
+    return {done,total:book.sections.length,percent:book.sections.length?Math.round(done/book.sections.length*100):0};
+  }
+  function score(questions,answers){
+    if(!Array.isArray(answers)||answers.length!==questions.length||questions.some((q,i)=>!Number.isInteger(answers[i])||answers[i]<0||answers[i]>=q.options.length))throw Error('请完成全部 5 道题后再提交。');
+    return {correct:questions.filter((q,i)=>q.correctIndex===answers[i]).length,total:questions.length};
+  }
+  const api={normalize,validate,key,progress,score};
+  if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  root.ClassicsCore=api;
+})(typeof window==='undefined'?globalThis:window);
+
+</script>
+<script data-bundled-src="word-study-core.js">
+(function (root) {
+  'use strict';
+  const object = value => !!value && typeof value === 'object' && !Array.isArray(value);
+  const unitId = value => typeof value === 'string' && /^[789][ab]-u[1-9]\d{0,2}$/.test(value);
+  const validKey = value => typeof value === 'string' && /^[789][ab]-u[1-9]\d{0,2}::(?:0|[1-9]\d{0,2})$/.test(value);
+  const count = value => Number.isSafeInteger(value) && value >= 0;
+  const timestamp = value => typeof value === 'string' && value.length <= 64 && Number.isFinite(Date.parse(value));
+  function dayKey(value = new Date()) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    return new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+  const dateKey = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && dayKey(value + 'T04:00:00Z') === value;
+  const validRecord = value => object(value) && Number.isInteger(value.level) && value.level >= 0 && value.level <= 4 && dateKey(value.due) && timestamp(value.at) && ['remembered','hard','spellingCorrect','spellingWrong'].every(field => count(value[field]));
+  const copyRecord = value => ({level:value.level,due:value.due,at:value.at,remembered:value.remembered,hard:value.hard,spellingCorrect:value.spellingCorrect,spellingWrong:value.spellingWrong});
+  function normalize(value) {
+    const state = object(value) && (value.version === undefined || value.version === 1) ? value : {};
+    return {version:1, records:Object.fromEntries(Object.entries(object(state.records) ? state.records : {}).filter(([key, record]) => validKey(key) && validRecord(record)).map(([key, record]) => [key, copyRecord(record)]))};
+  }
+  function validate(value) {
+    if (!object(value) || value.version !== 1 || !object(value.records) || Object.entries(value.records).some(([key, record]) => !validKey(key) || !validRecord(record))) {
+      throw Error('背单词记录格式损坏，请选择本站导出的完整备份。');
+    }
+    return true;
+  }
+  function key(id, index) {
+    if (!unitId(id) || !Number.isInteger(index) || index < 0 || index > 999) throw Error('无效的单元或单词位置。');
+    const word = root.ENGLISH_CURRICULUM?.units?.find(unit => unit.id === id)?.vocabulary?.[index];
+    const reviewId = word?.reviewId;
+    if (reviewId !== undefined && (!Number.isInteger(reviewId) || reviewId < 0 || reviewId > 999)) throw Error('无效的单词复习身份。');
+    // Initial IDs match v3.7 positions, so existing numeric records need no rewrite.
+    // Later content changes keep these IDs instead of inheriting a different word's history.
+    return id + '::' + (reviewId === undefined ? index : reviewId);
+  }
+  function createCard(id, index) {
+    key(id, index);
+    return {unitId:id,index,revealed:false,rated:false,checked:false,input:'',result:null,rating:null};
+  }
+  function reveal(card) { card.revealed = true; }
+  const add = value => Math.min(Number.MAX_SAFE_INTEGER, value + 1);
+  function currentRecord(state, card, at) {
+    const recordKey = key(card.unitId, card.index);
+    if (!validRecord(state.records[recordKey])) state.records[recordKey] = {level:0,due:dayKey(at),at:new Date(at).toISOString(),remembered:0,hard:0,spellingCorrect:0,spellingWrong:0};
+    return state.records[recordKey];
+  }
+  function evaluate(state, card, rating, at = new Date()) {
+    if (!card.revealed || card.rated || !['remembered','hard'].includes(rating) || !dayKey(at)) return false;
+    const record = currentRecord(state, card, at);
+    if (rating === 'remembered') {
+      record.remembered = add(record.remembered);
+      const day = dayKey(at);
+      if (record.level === 0 || record.due <= day) {
+        record.level = Math.min(4, record.level + 1);
+        const days = [1,3,7,14][record.level - 1];
+        record.due = new Date(Date.parse(day + 'T00:00:00Z') + days * 86400000).toISOString().slice(0,10);
+      }
+    } else {
+      record.level = 0; record.hard = add(record.hard); record.due = dayKey(at);
+    }
+    record.at = new Date(at).toISOString();
+    card.rated = true; card.rating = rating;
+    return true;
+  }
+  const spelling = text => String(text).trim().toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ');
+  function checkSpelling(state, card, input, answer, at = new Date()) {
+    if (card.checked || typeof input !== 'string' || !input.trim() || typeof answer !== 'string' || !answer.trim() || !dayKey(at)) return null;
+    const correct = spelling(input) === spelling(answer);
+    const record = currentRecord(state, card, at);
+    const field = correct ? 'spellingCorrect' : 'spellingWrong';
+    record[field] = add(record[field]); record.at = new Date(at).toISOString();
+    card.checked = true; card.input = input.trim();
+    card.result = {correct,answer,input:card.input};
+    return {...card.result};
+  }
+  function filterWords(state, unit, filter = 'all', today = dayKey()) {
+    return unit.vocabulary.map((word, index) => index).filter(index => {
+      const record = state.records[key(unit.id, index)];
+      if (filter === 'new') return !record || record.level === 0;
+      if (filter === 'due') return !record || record.due <= today;
+      return true;
+    });
+  }
+  function stats(state, unit, today = dayKey()) {
+    const records = unit.vocabulary.map((word, index) => state.records[key(unit.id,index)]);
+    const reviewed = records.filter(record => record && record.remembered + record.hard > 0).length;
+    const sum = field => records.reduce((total, record) => total + (record?.[field] || 0), 0);
+    return {total:records.length,reviewed,remembered:records.filter(record => record?.level > 0).length,needsWork:filterWords(state,unit,'new',today).length,due:filterWords(state,unit,'due',today).length,percent:records.length ? Math.round(reviewed / records.length * 100) : 0,oralRemembered:sum('remembered'),oralHard:sum('hard'),spellingCorrect:sum('spellingCorrect'),spellingWrong:sum('spellingWrong')};
+  }
+  const api = {normalize,validate,key,dayKey,createCard,reveal,evaluate,checkSpelling,filterWords,stats};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.WordStudyCore = api;
+})(typeof window === 'undefined' ? globalThis : window);
+
+</script>
+<script data-bundled-src="vendor/ts-fsrs-5.4.2.umd.js">
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.FSRS = {}));
+})(this, (function (exports) { 'use strict';
+
+  class FSRSError extends Error {
+    constructor(message = "FSRS Error") {
+      var _a;
+      super(message);
+      this.name = "FSRSError";
+      (_a = Error.captureStackTrace) == null ? void 0 : _a.call(Error, this, FSRSError);
+    }
+  }
+  class FSRSValidationError extends FSRSError {
+    constructor(message) {
+      var _a;
+      super(message);
+      this.name = "FSRSValidationError";
+      (_a = Error.captureStackTrace) == null ? void 0 : _a.call(Error, this, FSRSValidationError);
+    }
+  }
+
+  var State = /* @__PURE__ */ ((State2) => {
+    State2[State2["New"] = 0] = "New";
+    State2[State2["Learning"] = 1] = "Learning";
+    State2[State2["Review"] = 2] = "Review";
+    State2[State2["Relearning"] = 3] = "Relearning";
+    return State2;
+  })(State || {});
+  var Rating = /* @__PURE__ */ ((Rating2) => {
+    Rating2[Rating2["Manual"] = 0] = "Manual";
+    Rating2[Rating2["Again"] = 1] = "Again";
+    Rating2[Rating2["Hard"] = 2] = "Hard";
+    Rating2[Rating2["Good"] = 3] = "Good";
+    Rating2[Rating2["Easy"] = 4] = "Easy";
+    return Rating2;
+  })(Rating || {});
+
+  var __defProp$6 = Object.defineProperty;
+  var __defProps$2 = Object.defineProperties;
+  var __getOwnPropDescs$2 = Object.getOwnPropertyDescriptors;
+  var __getOwnPropSymbols$2 = Object.getOwnPropertySymbols;
+  var __hasOwnProp$2 = Object.prototype.hasOwnProperty;
+  var __propIsEnum$2 = Object.prototype.propertyIsEnumerable;
+  var __defNormalProp$6 = (obj, key, value) => key in obj ? __defProp$6(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __spreadValues$2 = (a, b) => {
+    for (var prop in b || (b = {}))
+      if (__hasOwnProp$2.call(b, prop))
+        __defNormalProp$6(a, prop, b[prop]);
+    if (__getOwnPropSymbols$2)
+      for (var prop of __getOwnPropSymbols$2(b)) {
+        if (__propIsEnum$2.call(b, prop))
+          __defNormalProp$6(a, prop, b[prop]);
+      }
+    return a;
+  };
+  var __spreadProps$2 = (a, b) => __defProps$2(a, __getOwnPropDescs$2(b));
+  class TypeConvert {
+    static card(card) {
+      return __spreadProps$2(__spreadValues$2({}, card), {
+        state: TypeConvert.state(card.state),
+        due: TypeConvert.time(card.due),
+        last_review: card.last_review ? TypeConvert.time(card.last_review) : void 0
+      });
+    }
+    static rating(value) {
+      if (typeof value === "string") {
+        const firstLetter = value.charAt(0).toUpperCase();
+        const restOfString = value.slice(1).toLowerCase();
+        const ret = Rating[`${firstLetter}${restOfString}`];
+        if (ret === void 0) {
+          throw new FSRSValidationError(`Invalid rating:[${value}]`);
+        }
+        return ret;
+      } else if (typeof value === "number") {
+        return value;
+      }
+      throw new FSRSValidationError(`Invalid rating:[${value}]`);
+    }
+    static state(value) {
+      if (typeof value === "string") {
+        const firstLetter = value.charAt(0).toUpperCase();
+        const restOfString = value.slice(1).toLowerCase();
+        const ret = State[`${firstLetter}${restOfString}`];
+        if (ret === void 0) {
+          throw new FSRSValidationError(`Invalid state:[${value}]`);
+        }
+        return ret;
+      } else if (typeof value === "number") {
+        return value;
+      }
+      throw new FSRSValidationError(`Invalid state:[${value}]`);
+    }
+    static time(value) {
+      if (value instanceof Date) {
+        return value;
+      }
+      const date = new Date(value);
+      if (typeof value === "object" && value !== null && !Number.isNaN(Date.parse(value) || +date)) {
+        return date;
+      } else if (typeof value === "string") {
+        const timestamp = Date.parse(value);
+        if (!Number.isNaN(timestamp)) {
+          return new Date(timestamp);
+        } else {
+          throw new FSRSValidationError(`Invalid date:[${value}]`);
+        }
+      } else if (typeof value === "number") {
+        return new Date(value);
+      }
+      throw new FSRSValidationError(`Invalid date:[${value}]`);
+    }
+    static review_log(log) {
+      return __spreadProps$2(__spreadValues$2({}, log), {
+        due: TypeConvert.time(log.due),
+        rating: TypeConvert.rating(log.rating),
+        state: TypeConvert.state(log.state),
+        review: TypeConvert.time(log.review)
+      });
+    }
+  }
+
+  /* istanbul ignore next -- @preserve */
+  Date.prototype.scheduler = function(t, isDay) {
+    return date_scheduler(this, t, isDay);
+  };
+  /* istanbul ignore next -- @preserve */
+  Date.prototype.diff = function(pre, unit) {
+    return date_diff(this, pre, unit);
+  };
+  /* istanbul ignore next -- @preserve */
+  Date.prototype.format = function() {
+    return formatDate(this);
+  };
+  /* istanbul ignore next -- @preserve */
+  Date.prototype.dueFormat = function(last_review, unit, timeUnit) {
+    return show_diff_message(this, last_review, unit, timeUnit);
+  };
+  function date_scheduler(now, t, isDay) {
+    return new Date(
+      isDay ? TypeConvert.time(now).getTime() + t * 24 * 60 * 60 * 1e3 : TypeConvert.time(now).getTime() + t * 60 * 1e3
+    );
+  }
+  function date_diff(now, pre, unit) {
+    if (!now || !pre) {
+      throw new FSRSValidationError("Invalid date");
+    }
+    const diff = TypeConvert.time(now).getTime() - TypeConvert.time(pre).getTime();
+    let r = 0;
+    switch (unit) {
+      case "days":
+        r = Math.floor(diff / (24 * 60 * 60 * 1e3));
+        break;
+      case "minutes":
+        r = Math.floor(diff / (60 * 1e3));
+        break;
+    }
+    return r;
+  }
+  function formatDate(dateInput) {
+    const date = TypeConvert.time(dateInput);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const seconds = date.getSeconds();
+    return `${year}-${padZero(month)}-${padZero(day)} ${padZero(hours)}:${padZero(
+    minutes
+  )}:${padZero(seconds)}`;
+  }
+  function padZero(num) {
+    return num < 10 ? `0${num}` : `${num}`;
+  }
+  const TIMEUNIT = [60, 60, 24, 31, 12];
+  const TIMEUNITFORMAT = ["second", "min", "hour", "day", "month", "year"];
+  function show_diff_message(due, last_review, unit, timeUnit = TIMEUNITFORMAT) {
+    due = TypeConvert.time(due);
+    last_review = TypeConvert.time(last_review);
+    if (timeUnit.length !== TIMEUNITFORMAT.length) {
+      timeUnit = TIMEUNITFORMAT;
+    }
+    let diff = due.getTime() - last_review.getTime();
+    let i = 0;
+    diff /= 1e3;
+    for (i = 0; i < TIMEUNIT.length; i++) {
+      if (diff < TIMEUNIT[i]) {
+        break;
+      } else {
+        diff /= TIMEUNIT[i];
+      }
+    }
+    return `${Math.floor(diff)}${unit ? timeUnit[i] : ""}`;
+  }
+  /* istanbul ignore next -- @preserve */
+  function fixDate(value) {
+    return TypeConvert.time(value);
+  }
+  /* istanbul ignore next -- @preserve */
+  function fixState(value) {
+    return TypeConvert.state(value);
+  }
+  /* istanbul ignore next -- @preserve */
+  function fixRating(value) {
+    return TypeConvert.rating(value);
+  }
+  const Grades = Object.freeze([
+    Rating.Again,
+    Rating.Hard,
+    Rating.Good,
+    Rating.Easy
+  ]);
+  const FUZZ_RANGES = [
+    {
+      start: 2.5,
+      end: 7,
+      factor: 0.15
+    },
+    {
+      start: 7,
+      end: 20,
+      factor: 0.1
+    },
+    {
+      start: 20,
+      end: Infinity,
+      factor: 0.05
+    }
+  ];
+  function get_fuzz_range(interval, elapsed_days, maximum_interval) {
+    let delta = 1;
+    for (const range of FUZZ_RANGES) {
+      delta += range.factor * Math.max(Math.min(interval, range.end) - range.start, 0);
+    }
+    interval = Math.min(interval, maximum_interval);
+    let min_ivl = Math.max(2, Math.round(interval - delta));
+    const max_ivl = Math.min(Math.round(interval + delta), maximum_interval);
+    if (interval > elapsed_days) {
+      min_ivl = Math.max(min_ivl, elapsed_days + 1);
+    }
+    min_ivl = Math.min(min_ivl, max_ivl);
+    return { min_ivl, max_ivl };
+  }
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+  function roundTo(num, decimals) {
+    const factor = 10 ** decimals;
+    return Math.round(num * factor) / factor;
+  }
+  function dateDiffInDays(last, cur) {
+    const utc1 = Date.UTC(
+      last.getUTCFullYear(),
+      last.getUTCMonth(),
+      last.getUTCDate()
+    );
+    const utc2 = Date.UTC(
+      cur.getUTCFullYear(),
+      cur.getUTCMonth(),
+      cur.getUTCDate()
+    );
+    return Math.floor(
+      (utc2 - utc1) / 864e5
+      /** 1000 * 60 * 60 * 24*/
+    );
+  }
+
+  const ConvertStepUnitToMinutes = (step) => {
+    const unit = step.slice(-1);
+    const value = parseInt(step.slice(0, -1), 10);
+    if (Number.isNaN(value) || !Number.isFinite(value) || value < 0) {
+      throw new FSRSValidationError(`Invalid step value: ${step}`);
+    }
+    switch (unit) {
+      case "m":
+        return value;
+      case "h":
+        return value * 60;
+      case "d":
+        return value * 1440;
+      default:
+        throw new FSRSValidationError(
+          `Invalid step unit: ${step}, expected m/h/d`
+        );
+    }
+  };
+  const BasicLearningStepsStrategy = (params, state, cur_step) => {
+    const learning_steps = state === State.Relearning || state === State.Review ? params.relearning_steps : params.learning_steps;
+    const steps_length = learning_steps.length;
+    if (steps_length === 0 || cur_step >= steps_length) return {};
+    const firstStep = learning_steps[0];
+    const toMinutes = ConvertStepUnitToMinutes;
+    const getAgainInterval = () => {
+      return toMinutes(firstStep);
+    };
+    const getHardInterval = () => {
+      if (steps_length === 1) return Math.round(toMinutes(firstStep) * 1.5);
+      const nextStep = learning_steps[1];
+      return Math.round((toMinutes(firstStep) + toMinutes(nextStep)) / 2);
+    };
+    const getStepInfo = (index) => {
+      if (index < 0 || index >= steps_length) {
+        return null;
+      } else {
+        return learning_steps[index];
+      }
+    };
+    const getGoodMinutes = (step) => {
+      return toMinutes(step);
+    };
+    const result = {};
+    const step_info = getStepInfo(Math.max(0, cur_step));
+    if (state === State.Review) {
+      result[Rating.Again] = {
+        scheduled_minutes: toMinutes(step_info),
+        next_step: 0
+      };
+      return result;
+    } else {
+      result[Rating.Again] = {
+        scheduled_minutes: getAgainInterval(),
+        next_step: 0
+      };
+      result[Rating.Hard] = {
+        scheduled_minutes: getHardInterval(),
+        next_step: cur_step
+      };
+      const next_info = getStepInfo(cur_step + 1);
+      if (next_info) {
+        const nextMin = getGoodMinutes(next_info);
+        if (nextMin) {
+          result[Rating.Good] = {
+            scheduled_minutes: Math.round(nextMin),
+            next_step: cur_step + 1
+          };
+        }
+      }
+    }
+    return result;
+  };
+
+  function DefaultInitSeedStrategy() {
+    const time = this.review_time.getTime();
+    const reps = this.current.reps;
+    const mul = this.current.difficulty * this.current.stability;
+    return `${time}_${reps}_${mul}`;
+  }
+  function GenSeedStrategyWithCardId(card_id_field) {
+    return function() {
+      var _a;
+      const card_id = (_a = Reflect.get(this.current, card_id_field)) != null ? _a : 0;
+      const reps = this.current.reps;
+      return String(card_id + reps || 0);
+    };
+  }
+
+  var StrategyMode = /* @__PURE__ */ ((StrategyMode2) => {
+    StrategyMode2["SCHEDULER"] = "Scheduler";
+    StrategyMode2["LEARNING_STEPS"] = "LearningSteps";
+    StrategyMode2["SEED"] = "Seed";
+    return StrategyMode2;
+  })(StrategyMode || {});
+
+  var __defProp$5 = Object.defineProperty;
+  var __defNormalProp$5 = (obj, key, value) => key in obj ? __defProp$5(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __publicField$5 = (obj, key, value) => __defNormalProp$5(obj, typeof key !== "symbol" ? key + "" : key, value);
+  class AbstractScheduler {
+    // init
+    constructor(card, now, algorithm, strategies) {
+      __publicField$5(this, "last");
+      __publicField$5(this, "current");
+      __publicField$5(this, "review_time");
+      __publicField$5(this, "next", /* @__PURE__ */ new Map());
+      __publicField$5(this, "algorithm");
+      __publicField$5(this, "strategies");
+      __publicField$5(this, "elapsed_days", 0);
+      this.algorithm = algorithm;
+      this.last = TypeConvert.card(card);
+      this.current = TypeConvert.card(card);
+      this.review_time = TypeConvert.time(now);
+      this.strategies = strategies;
+      this.init();
+    }
+    checkGrade(grade) {
+      if (!Number.isFinite(grade) || grade < 1 || grade > 4) {
+        throw new FSRSValidationError(`Invalid grade "${grade}",expected 1-4`);
+      }
+    }
+    init() {
+      const { state, last_review } = this.current;
+      let interval = 0;
+      if (state !== State.New && last_review) {
+        interval = dateDiffInDays(last_review, this.review_time);
+      }
+      this.current.last_review = this.review_time;
+      this.elapsed_days = interval;
+      this.current.elapsed_days = interval;
+      this.current.reps += 1;
+      let seed_strategy = DefaultInitSeedStrategy;
+      if (this.strategies) {
+        const custom_strategy = this.strategies.get(StrategyMode.SEED);
+        if (custom_strategy) {
+          seed_strategy = custom_strategy;
+        }
+      }
+      this.algorithm.seed = seed_strategy.call(this);
+    }
+    preview() {
+      return {
+        [Rating.Again]: this.review(Rating.Again),
+        [Rating.Hard]: this.review(Rating.Hard),
+        [Rating.Good]: this.review(Rating.Good),
+        [Rating.Easy]: this.review(Rating.Easy),
+        [Symbol.iterator]: this.previewIterator.bind(this)
+      };
+    }
+    *previewIterator() {
+      for (const grade of Grades) {
+        yield this.review(grade);
+      }
+    }
+    review(grade) {
+      const { state } = this.last;
+      let item;
+      this.checkGrade(grade);
+      switch (state) {
+        case State.New:
+          item = this.newState(grade);
+          break;
+        case State.Learning:
+        case State.Relearning:
+          item = this.learningState(grade);
+          break;
+        case State.Review:
+          item = this.reviewState(grade);
+          break;
+      }
+      return item;
+    }
+    buildLog(rating) {
+      const { last_review, due, elapsed_days } = this.last;
+      return {
+        rating,
+        state: this.current.state,
+        due: last_review || due,
+        stability: this.current.stability,
+        difficulty: this.current.difficulty,
+        elapsed_days: this.elapsed_days,
+        last_elapsed_days: elapsed_days,
+        scheduled_days: this.current.scheduled_days,
+        learning_steps: this.current.learning_steps,
+        review: this.review_time
+      };
+    }
+  }
+
+  var __defProp$4 = Object.defineProperty;
+  var __defNormalProp$4 = (obj, key, value) => key in obj ? __defProp$4(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __publicField$4 = (obj, key, value) => __defNormalProp$4(obj, typeof key !== "symbol" ? key + "" : key, value);
+  class Alea {
+    constructor(seed) {
+      __publicField$4(this, "c");
+      __publicField$4(this, "s0");
+      __publicField$4(this, "s1");
+      __publicField$4(this, "s2");
+      const mash = Mash();
+      this.c = 1;
+      this.s0 = mash(" ");
+      this.s1 = mash(" ");
+      this.s2 = mash(" ");
+      if (seed == null) seed = Date.now();
+      this.s0 -= mash(seed);
+      if (this.s0 < 0) this.s0 += 1;
+      this.s1 -= mash(seed);
+      if (this.s1 < 0) this.s1 += 1;
+      this.s2 -= mash(seed);
+      if (this.s2 < 0) this.s2 += 1;
+    }
+    next() {
+      const t = 2091639 * this.s0 + this.c * 23283064365386963e-26;
+      this.s0 = this.s1;
+      this.s1 = this.s2;
+      this.c = t | 0;
+      this.s2 = t - this.c;
+      return this.s2;
+    }
+    set state(state) {
+      this.c = state.c;
+      this.s0 = state.s0;
+      this.s1 = state.s1;
+      this.s2 = state.s2;
+    }
+    get state() {
+      return {
+        c: this.c,
+        s0: this.s0,
+        s1: this.s1,
+        s2: this.s2
+      };
+    }
+  }
+  function Mash() {
+    let n = 4022871197;
+    return function mash(data) {
+      data = String(data);
+      for (let i = 0; i < data.length; i++) {
+        n += data.charCodeAt(i);
+        let h = 0.02519603282416938 * n;
+        n = h >>> 0;
+        h -= n;
+        h *= n;
+        n = h >>> 0;
+        h -= n;
+        n += h * 4294967296;
+      }
+      return (n >>> 0) * 23283064365386963e-26;
+    };
+  }
+  function alea(seed) {
+    const xg = new Alea(seed);
+    const prng = () => xg.next();
+    prng.int32 = () => xg.next() * 4294967296 | 0;
+    prng.double = () => prng() + (prng() * 2097152 | 0) * 11102230246251565e-32;
+    prng.state = () => xg.state;
+    prng.importState = (state) => {
+      xg.state = state;
+      return prng;
+    };
+    return prng;
+  }
+
+  const version="5.4.2";
+
+  const default_request_retention = 0.9;
+  const default_maximum_interval = 36500;
+  const default_enable_fuzz = false;
+  const default_enable_short_term = true;
+  const default_learning_steps = Object.freeze([
+    "1m",
+    "10m"
+  ]);
+  const default_relearning_steps = Object.freeze([
+    "10m"
+  ]);
+  const FSRSVersion = `v${version} using FSRS-6.0`;
+  const S_MIN = 1e-3;
+  const S_MAX = 36500;
+  const INIT_S_MAX = 100;
+  const FSRS5_DEFAULT_DECAY = 0.5;
+  const FSRS6_DEFAULT_DECAY = 0.1542;
+  const default_w = Object.freeze([
+    0.212,
+    1.2931,
+    2.3065,
+    8.2956,
+    6.4133,
+    0.8334,
+    3.0194,
+    1e-3,
+    1.8722,
+    0.1666,
+    0.796,
+    1.4835,
+    0.0614,
+    0.2629,
+    1.6483,
+    0.6014,
+    1.8729,
+    0.5425,
+    0.0912,
+    0.0658,
+    FSRS6_DEFAULT_DECAY
+  ]);
+  const W17_W18_Ceiling = 2;
+  const CLAMP_PARAMETERS = (w17_w18_ceiling, enable_short_term = default_enable_short_term) => [
+    [S_MIN, INIT_S_MAX],
+    [S_MIN, INIT_S_MAX],
+    [S_MIN, INIT_S_MAX],
+    [S_MIN, INIT_S_MAX],
+    [1, 10],
+    [1e-3, 4],
+    [1e-3, 4],
+    [1e-3, 0.75],
+    [0, 4.5],
+    [0, 0.8],
+    [1e-3, 3.5],
+    [1e-3, 5],
+    [1e-3, 0.25],
+    [1e-3, 0.9],
+    [0, 4],
+    [0, 1],
+    [1, 6],
+    [0, w17_w18_ceiling],
+    [0, w17_w18_ceiling],
+    [
+      enable_short_term ? 0.01 : 0,
+      0.8
+    ],
+    [0.1, 0.8]
+  ];
+
+  const clipParameters = (parameters, numRelearningSteps, enableShortTerm = default_enable_short_term) => {
+    const clip = CLAMP_PARAMETERS(W17_W18_Ceiling, enableShortTerm).slice(
+      0,
+      parameters.length
+    );
+    if (Math.max(0, numRelearningSteps) > 1) {
+      const w11 = clamp(parameters[11] || 0, clip[11][0], clip[11][1]);
+      const w13 = clamp(parameters[13] || 0, clip[13][0], clip[13][1]);
+      const w14 = clamp(parameters[14] || 0, clip[14][0], clip[14][1]);
+      const value = -(Math.log(w11) + Math.log(Math.pow(2, w13) - 1) + w14 * 0.3) / numRelearningSteps;
+      const w17_w18_ceiling = clamp(
+        roundTo(Math.sqrt(Math.max(value, 0)), 8),
+        0.01,
+        W17_W18_Ceiling
+      );
+      if (clip[17]) clip[17] = [clip[17][0], w17_w18_ceiling];
+      if (clip[18]) clip[18] = [clip[18][0], w17_w18_ceiling];
+    }
+    return clip.map(
+      ([min, max], index) => clamp(parameters[index] || 0, min, max)
+    );
+  };
+  const checkParameters = (parameters) => {
+    const invalid = parameters.find((param) => !Number.isFinite(param));
+    if (invalid !== void 0) {
+      throw new FSRSValidationError(
+        `Non-finite or NaN value in parameters ${parameters}`
+      );
+    } else if (![17, 19, 21].includes(parameters.length)) {
+      throw new FSRSValidationError(
+        `Invalid parameter length: ${parameters.length}. Must be 17, 19 or 21 for FSRSv4, 5 and 6 respectively.`
+      );
+    }
+    return parameters;
+  };
+  const migrateParameters = (parameters, numRelearningSteps = 0, enableShortTerm = default_enable_short_term) => {
+    if (parameters === void 0) {
+      return [...default_w];
+    }
+    switch (parameters.length) {
+      case 21:
+        return clipParameters(
+          Array.from(parameters),
+          numRelearningSteps,
+          enableShortTerm
+        );
+      case 19:
+        console.debug("[FSRS-6]auto fill w from 19 to 21 length");
+        return clipParameters(
+          Array.from(parameters),
+          numRelearningSteps,
+          enableShortTerm
+        ).concat([0, FSRS5_DEFAULT_DECAY]);
+      case 17: {
+        const w = clipParameters(
+          Array.from(parameters),
+          numRelearningSteps,
+          enableShortTerm
+        );
+        w[4] = +(w[5] * 2 + w[4]).toFixed(8);
+        w[5] = +(Math.log(w[5] * 3 + 1) / 3).toFixed(8);
+        w[6] = +(w[6] + 0.5).toFixed(8);
+        console.debug("[FSRS-6]auto fill w from 17 to 21 length");
+        return w.concat([0, 0, 0, FSRS5_DEFAULT_DECAY]);
+      }
+      default:
+        console.warn("[FSRS]Invalid parameters length, using default parameters");
+        return [...default_w];
+    }
+  };
+  const generatorPa{% endraw %}

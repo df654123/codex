@@ -1,0 +1,950 @@
+{% raw %} ${state}">
+        <span class="day-number">${i+1}</span>
+        <h4>${escapeHtml(item.title)}</h4>
+        <p>${escapeHtml(item.focus)}</p>
+        <small>${done?'已完成':i===index?'今天验证':'待验证'}</small>
+      </article>`;
+    }).join('');
+    const summary=document.getElementById('betaPlanSummary');
+    if(summary){
+      summary.textContent=`第${index+1}天：${TEST_PLAN[index].title}。本轮重点：${(learnerProfile||defaultLearnerProfile()).betaFocus}。`;
+    }
+  }
+
+  function formatTimer(ms){
+    const total=Math.max(0,Math.floor(ms/1000));
+    const minutes=String(Math.floor(total/60)).padStart(2,'0');
+    const seconds=String(total%60).padStart(2,'0');
+    return `${minutes}:${seconds}`;
+  }
+
+  function currentLearningElapsed(){
+    if(!activeLearningSession)return 0;
+    return Math.max(0,activeLearningSession.elapsedMs||0)+(activeLearningSession.resumedAt?Math.max(0,Date.now()-activeLearningSession.resumedAt):0);
+  }
+  function checkpointLearning(pause=false){
+    if(!activeLearningSession||window.restoringSnapshot)return;
+    activeLearningSession.elapsedMs=currentLearningElapsed();
+    activeLearningSession.resumedAt=pause?null:Date.now();
+    saveActiveLearningSession();
+  }
+
+  function updateLearningSessionUI(){
+    const shortcut=document.getElementById('sessionShortcut');
+    if(shortcut){
+      shortcut.textContent=activeLearningSession?'结束并自评':'开始今日学习';
+      shortcut.onclick=activeLearningSession?requestFinishLearningSession:startLearningSession;
+    }
+    const timer=document.getElementById('sessionTimer');
+    const startButton=document.getElementById('startLearningSession');
+    const finishButton=document.getElementById('finishLearningSession');
+    const title=document.getElementById('sessionControlTitle');
+    const description=document.getElementById('sessionControlDescription');
+    if(!timer||!startButton||!finishButton) return;
+    if(activeLearningSession){
+      const elapsed=currentLearningElapsed();
+      timer.textContent=formatTimer(elapsed);
+      startButton.hidden=true;
+      finishButton.hidden=false;
+      title.textContent='本次学习正在记录';
+      description.textContent=`从北京时间 ${new Date(activeLearningSession.startAt).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit'})}开始。学习过程中可以自由切换页面。`;
+    }else{
+      timer.textContent='00:00';
+      startButton.hidden=false;
+      finishButton.hidden=true;
+      title.textContent='给今天留下一点进步';
+      description.textContent='开始后记录前台停留时间，结束时写一句自己的感受。';
+    }
+  }
+
+  function startLearningSession(){
+    if(activeLearningSession){
+      showToast('本次学习已经开始。');
+      return;
+    }
+    if(!learnerProfile) learnerProfile=defaultLearnerProfile();
+    activeLearningSession={
+      id:uid('learning'),
+      elapsedMs:0,resumedAt:Date.now(),mode:safeStore.get('studyMode','standard'),
+      taskKeys:EnglishCore.mode(safeStore.get('studyMode','standard')).tasks.slice(),
+      learningDate:EnglishCore.dayKey(),
+      unitId:window.Curriculum?Curriculum.unit().id:null,
+      startAt:new Date().toISOString(),
+      startView:betaCurrentView,
+      targetMinutes:EnglishCore.mode(safeStore.get("studyMode","standard")).minutes,
+      taskSnapshotStart:Object.fromEntries(taskBoxes.map(b=>[b.dataset.task,b.checked]))
+    };
+    saveActiveLearningSession();
+    betaTrackEvent('learning_session_start',{targetMinutes:learnerProfile.targetMinutes});
+    startLearningTimer();
+    updateLearningSessionUI();
+    openView('today');
+    showToast('已开始记录本次真实学习。');
+  }
+
+  function startLearningTimer(){
+    if(learningTimerHandle) window.clearInterval(learningTimerHandle);
+    learningTimerHandle=window.setInterval(updateLearningSessionUI,1000);
+  }
+
+  function requestFinishLearningSession(){
+    if(!activeLearningSession){
+      showToast('当前没有正在进行的学习。');
+      return;
+    }
+    checkpointLearning(true);
+    pendingSessionDurationMs=currentLearningElapsed();
+    activeLearningSession.reviewEndAt=new Date().toISOString();
+    const learningDate=activeLearningSession.learningDate||EnglishCore.dayKey(activeLearningSession.startAt);
+    activeLearningSession.reviewTaskSnapshot=window.LearningApp?LearningApp.tasksForDay(learningDate,activeLearningSession.unitId):{...saved};
+    saveActiveLearningSession();
+    document.getElementById('sessionReviewDuration').textContent=`本次学习时长：${formatDuration(pendingSessionDurationMs)}`;
+    document.getElementById('sessionReviewStatus').textContent='';
+    document.getElementById('exportPendingSession').hidden=true;
+    document.getElementById('sessionReviewModal').classList.add('open');
+    document.body.style.overflow='hidden';
+  }
+
+  function closeSessionReview(){
+    document.getElementById('sessionReviewModal').classList.remove('open');
+    document.body.style.overflow='';
+    if(activeLearningSession){
+      window.pendingLearningRecord=null;pendingSessionDurationMs=0;
+      activeLearningSession.resumedAt=Date.now();
+      delete activeLearningSession.reviewEndAt;delete activeLearningSession.reviewTaskSnapshot;
+      saveActiveLearningSession();
+    }
+  }
+
+  function saveLearningSessionReview(){
+    if(!activeLearningSession)return;
+    const keys=activeLearningSession.taskKeys||EnglishCore.mode(activeLearningSession.mode).tasks;
+    const learningDate=activeLearningSession.learningDate||EnglishCore.dayKey(activeLearningSession.startAt);
+    const taskSnapshotEnd=activeLearningSession.reviewTaskSnapshot||(window.LearningApp?LearningApp.tasksForDay(learningDate,activeLearningSession.unitId):{...saved});
+    const completion=Math.round(keys.filter(k=>taskSnapshotEnd[k]===true).length/keys.length*100);
+    const record={...activeLearningSession,learningDate,endAt:activeLearningSession.reviewEndAt||new Date().toISOString(),durationMs:pendingSessionDurationMs||currentLearningElapsed(),mood:document.querySelector('input[name="childMood"]:checked')?.value||'😐一般',difficulty:Number(document.getElementById('sessionDifficulty').value),independence:document.getElementById('sessionIndependence').value,favoriteModule:document.getElementById('sessionFavoriteModule').value,hardestModule:document.getElementById('sessionHardestModule').value,childNote:document.getElementById('sessionChildNote').value.trim(),taskCompletion:completion,taskSnapshotEnd:{...taskSnapshotEnd}};
+    const current=loadBetaData();
+    const combined=new Map([...current.learningSessions,...learningSessions()].map(s=>[s.id,s]));
+    combined.set(record.id,record);
+    const candidate={...betaData,learningSessions:[...combined.values()].sort((a,b)=>Date.parse(b.endAt)-Date.parse(a.endAt))};
+    window.pendingLearningRecord=record;
+    if(!safeStore.set(BETA_STORAGE_KEY,JSON.stringify(candidate))){document.getElementById('sessionReviewStatus').textContent='未能保存。学习时长和自评已保留在此页，请点击“备份当前记录”后重试。';document.getElementById('exportPendingSession').hidden=false;return;}
+    window.pendingLearningRecord=null;betaData=candidate;activeLearningSession=null;pendingSessionDurationMs=0;
+    saveActiveLearningSession();
+    if(learningTimerHandle)clearInterval(learningTimerHandle);learningTimerHandle=null;
+    document.getElementById('sessionChildNote').value='';
+    closeSessionReview();updateLearningSessionUI();
+    if(window.LearningApp)LearningApp.render();
+    openView('growth');showToast('本次学习与自评已保存。');
+  }
+
+  function restartSevenDayTest(){
+    if(!learnerProfile) learnerProfile=defaultLearnerProfile();
+    const confirmed=window.confirm('从今天重新开始7天内测吗？历史学习记录不会删除。');
+    if(!confirmed) return;
+    learnerProfile.betaStartDate=EnglishCore.dayKey();
+    saveLearnerProfile(learnerProfile);
+    betaTrackEvent('seven_day_test_restarted',{startDate:learnerProfile.betaStartDate});
+    renderSevenDayPlan();
+  }
+
+  function modeValue(values){
+    const counts={};
+    values.filter(Boolean).forEach(v=>counts[v]=(counts[v]||0)+1);
+    return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+  }
+
+  function renderWeeklyReport(){
+    const sessions=learningSessions();
+    const uniqueDays=new Set(sessions.map(s=>dateKey(s.endAt||s.startAt)));
+    const totalDuration=sessions.reduce((sum,s)=>sum+(s.durationMs||0),0);
+    const averageDuration=sessions.length?totalDuration/sessions.length:0;
+    const independent=sessions.filter(s=>s.independence==='完全独立').length;
+    const completionAvg=sessions.length
+      ?Math.round(sessions.reduce((sum,s)=>sum+(s.taskCompletion||0),0)/sessions.length)
+      :0;
+
+    document.getElementById('weeklyDaysUsed').textContent=`${uniqueDays.size}天`;
+    document.getElementById('weeklyAverageTime').textContent=sessions.length?formatDuration(averageDuration):'0分钟';
+    document.getElementById('weeklyIndependentRate').textContent=sessions.length?`${Math.round(independent/sessions.length*100)}%`:'0%';
+    document.getElementById('weeklyCompletionRate').textContent=`${completionAvg}%`;
+
+    const issueCategory=modeValue(betaData.issues.map(i=>i.category));
+    const hardest=modeValue([
+      ...sessions.map(s=>s.hardestModule),
+      ...betaData.parentLogs.map(l=>l.hardest)
+    ]);
+    document.getElementById('weeklyTopIssue').textContent=issueCategory
+      ?`当前最常见问题类型是“${issueCategory}”，应先检查是否重复出现在同一页面或同一学习环节。`
+      :'尚未形成明确问题类型。真实遇到问题时请立即记录。';
+    document.getElementById('weeklyHardestModule').textContent=hardest
+      ?`目前最常被记录为困难的是“${hardest}”。下一轮应先降低该环节的理解或操作负担。`
+      :'尚无稳定结论。';
+
+    const p0=betaData.issues.filter(i=>i.status!=='resolved'&&i.priority==='P0').length;
+    const p1=betaData.issues.filter(i=>i.status!=='resolved'&&i.priority==='P1').length;
+    let recommendation='优先积累至少3天真实记录，不急于增加新功能。';
+    let readiness='当前阶段：样本不足，继续家庭内测。';
+    if(p0>0){
+      recommendation=`立即处理${p0}个P0问题，停止扩展新课程，先保证内容与发音正确。`;
+      readiness='当前阶段：存在阻断性问题，不具备复制或对外测试条件。';
+    }else if(uniqueDays.size>=5 && p1>0){
+      recommendation=`集中解决${p1}个P1问题，再进行第二轮7天验证。`;
+      readiness='当前阶段：已形成初步证据，但学习流程仍需优化。';
+    }else if(uniqueDays.size>=7 && p0===0 && p1===0 && completionAvg>=80){
+      recommendation='Unit 1核心流程已较稳定，可开始固化课程模板并小范围邀请第二位家庭测试。';
+      readiness='当前阶段：可进入小范围熟人内测，但尚不适合正式商业化。';
+    }else if(uniqueDays.size>=5){
+      recommendation='保持现有功能范围，针对最常见困难进行一次小改版后继续验证。';
+      readiness='当前阶段：家庭验证进行中，暂不扩展商业功能。';
+    }
+    document.getElementById('weeklyRecommendation').textContent=recommendation;
+    document.getElementById('commercialReadiness').textContent=readiness;
+  }
+
+  function exportSevenDayReport(){
+    renderWeeklyReport();
+    const sessions=learningSessions();
+    const profile=learnerProfile||defaultLearnerProfile();
+    const report=[
+      '# AI英语成长空间｜7天家庭内测报告',
+      '',
+      `- 昵称：${profile.nickname}`,
+      `- 年级：${profile.grade}`,
+      `- 内测开始：${profile.betaStartDate}`,
+      `- 重点验证：${profile.betaFocus}`,
+      `- 导出时间：${new Date().toLocaleString('zh-CN')}`,
+      '',
+      '## 核心数据',
+      `- 真实使用天数：${new Set(sessions.map(s=>dateKey(s.endAt||s.startAt))).size}天`,
+      `- 完整学习会话：${sessions.length}次`,
+      `- 待处理问题：${betaData.issues.filter(i=>i.status!=='resolved').length}个`,
+      `- 音频评价：${betaData.audioReviews.length}条`,
+      `- 家长观察：${betaData.parentLogs.length}条`,
+      '',
+      '## 学习会话',
+      ...sessions.map((s,i)=>`${i+1}. ${new Date(s.startAt).toLocaleString('zh-CN')}｜${formatDuration(s.durationMs)}｜完成度${s.taskCompletion}%｜${s.independence}｜最难：${s.hardestModule}｜孩子反馈：${s.childNote||'无'}`),
+      '',
+      '## 待处理问题',
+      ...betaData.issues.filter(i=>i.status!=='resolved').map((i,index)=>`${index+1}. [${i.priority}] ${i.title}｜${i.category}｜${i.details}`),
+      '',
+      '## 家长观察',
+      ...betaData.parentLogs.map((l,index)=>`${index+1}. ${new Date(l.date).toLocaleString('zh-CN')}｜${l.startMode}｜投入${l.engagement}/5｜困难：${l.hardest||'无'}｜喜欢：${l.favorite||'无'}｜${l.observation||''}`)
+    ].join('\n');
+    downloadText(`AI英语成长空间_7天内测报告_${EnglishCore.dayKey()}.md`,report,'text/markdown;charset=utf-8');
+  }
+
+  document.getElementById('openLearnerSetup').addEventListener('click',openLearnerSetup);
+  document.getElementById('saveLearnerSetup').addEventListener('click',()=>{
+    if(!saveLearnerProfile(readSetupForm()))return;
+    closeLearnerSetup();
+    renderBetaDashboard();
+    showToast('学习设置已保存。');
+  });
+  document.getElementById('useDefaultLearnerSetup').addEventListener('click',()=>{
+    saveLearnerProfile(defaultLearnerProfile());
+    closeLearnerSetup();
+    renderBetaDashboard();
+  });
+  document.getElementById('startLearningSession').addEventListener('click',startLearningSession);
+  document.getElementById('finishLearningSession').addEventListener('click',requestFinishLearningSession);
+  document.getElementById('saveSessionReview').addEventListener('click',saveLearningSessionReview);
+  document.getElementById('cancelSessionReview').addEventListener('click',closeSessionReview);
+  document.getElementById('restartSevenDayTest').addEventListener('click',restartSevenDayTest);
+  document.getElementById('exportWeeklyReport').addEventListener('click',exportSevenDayReport);
+  document.getElementById('learnerSetupModal').addEventListener('click',e=>{
+    if(e.target.id==='learnerSetupModal' && learnerProfile) closeLearnerSetup();
+  });
+  document.getElementById('sessionReviewModal').addEventListener('click',e=>{
+    if(e.target.id==='sessionReviewModal') closeSessionReview();
+  });
+
+  const originalRenderBetaDashboardV21=renderBetaDashboard;
+  renderBetaDashboard=function(){
+    originalRenderBetaDashboardV21();
+    renderSevenDayPlan();
+    renderWeeklyReport();
+  };
+
+  applyLearnerProfile();
+  updateLearningSessionUI();
+  if(activeLearningSession) startLearningTimer();
+  if(!learnerProfile)learnerProfile=defaultLearnerProfile();
+
+
+
+  document.getElementById('openFeedbackDock').addEventListener('click',()=>openFeedbackModal({category:'操作不方便',priority:'P1'}));
+  document.getElementById('quickFeedbackFromBeta').addEventListener('click',()=>openFeedbackModal({category:'其他',priority:'P1'}));
+  document.getElementById('closeFeedbackModal').addEventListener('click',closeFeedbackModal);
+  document.getElementById('feedbackModal').addEventListener('click',e=>{if(e.target.id==='feedbackModal')closeFeedbackModal();});
+  document.getElementById('submitFeedback').addEventListener('click',submitBetaFeedback);
+  document.getElementById('saveParentLog').addEventListener('click',saveParentObservation);
+  document.getElementById('refreshBetaDashboard').addEventListener('click',renderBetaDashboard);
+  document.getElementById('issueStatusFilter').addEventListener('change',renderBetaDashboard);
+  document.getElementById('issuePriorityFilter').addEventListener('change',renderBetaDashboard);
+  document.getElementById('exportBetaJson').addEventListener('click',exportBetaJson);
+  document.getElementById('exportIssueCsv').addEventListener('click',exportIssuesCsv);
+  document.getElementById('exportParentCsv').addEventListener('click',exportParentLogsCsv);
+  document.getElementById('clearBetaData').addEventListener('click',clearBetaData);
+  document.querySelectorAll('[data-audio-rating]').forEach(btn=>{
+    btn.addEventListener('click',()=>saveAudioReview(btn.dataset.audioRating));
+  });
+
+
+  const ISSUE_STATUS_LABELS={
+    new:'新记录',
+    confirmed:'已确认',
+    fixed:'已修复待复测',
+    retest:'复测中',
+    resolved:'已关闭'
+  };
+
+  const DEFAULT_HYPOTHESES=[
+    {title:'孩子能够独立找到并开始今日学习',status:'untested',evidence:''},
+    {title:'每天20—35分钟的学习量可以持续完成',status:'untested',evidence:''},
+    {title:'教材、阅读和听说的顺序简单清楚',status:'untested',evidence:''},
+    {title:'课程音频足以作为孩子跟读标准',status:'untested',evidence:''},
+    {title:'孩子完成后愿意第二天继续使用',status:'untested',evidence:''}
+  ];
+
+  const QA_ITEMS=[
+    {id:'content_vocab',title:'核心词汇拼写、词义和例句已人工核对',note:'Unit 1全部单词逐项核对。',critical:true},
+    {id:'content_grammar',title:'语法规则与练习答案已人工核对',note:'am / is / are及解释无歧义。',critical:true},
+    {id:'content_reading',title:'阅读原文、问题和参考答案已人工核对',note:'原创内容与所标年级和难度相符。',critical:true},
+    {id:'pron_words',title:'重点单词发音已人工审听',note:'student、classmate、years等。',critical:true},
+    {id:'pron_sentences',title:'重点句语调、重音与弱读已人工审听',note:'特殊疑问句、一般疑问句分别处理。',critical:true},
+    {id:'flow_child',title:'孩子可以独立找到下一步',note:'不依靠家长逐步指挥。',critical:true},
+    {id:'flow_mobile',title:'手机端按钮、导航和输入均可正常使用',note:'至少在一台常用手机测试。',critical:true},
+    {id:'data_backup',title:'升级前已完成整站数据备份',note:'确保内测证据不会丢失。',critical:true},
+    {id:'privacy',title:'页面不要求真实姓名、学校或敏感信息',note:'维持最小化数据原则。',critical:true},
+    {id:'feedback',title:'P0问题已全部关闭',note:'错误内容、发音或不能使用的问题清零。',critical:true},
+    {id:'p1_retest',title:'P1问题完成至少一次复测',note:'不能只标记修复，必须真实再用。',critical:false},
+    {id:'child_willing',title:'孩子愿意继续使用的证据已记录',note:'以孩子自评和次日行为判断。',critical:false}
+  ];
+
+  function ensureIterationDefaults(){
+    if(!Array.isArray(betaData.hypotheses)) betaData.hypotheses=[];
+    if(!betaData.hypotheses.length){
+      betaData.hypotheses=DEFAULT_HYPOTHESES.map((item,index)=>({
+        id:`hyp_${index+1}`,
+        ...item,
+        createdAt:new Date().toISOString()
+      }));
+    }
+    if(!betaData.qaChecklist || typeof betaData.qaChecklist!=='object') betaData.qaChecklist={};
+    if(!Array.isArray(betaData.releases)) betaData.releases=[];
+    if(!Array.isArray(betaData.backups)) betaData.backups=[];
+    betaData.issues=(betaData.issues||[]).map(issue=>{
+      let status=issue.status||'new';
+      if(status==='open') status='new';
+      return Object.assign({fixNote:'',fixedIn:'',retestNote:''},issue,{status});
+    });
+    saveBetaData();
+  }
+
+  function activeIssues(){
+    return betaData.issues.filter(issue=>issue.status!=='resolved');
+  }
+
+  function validateLiteracyConflictEvidence(value){
+    const fields=['evidence','expression','comparison','reflection'];
+    const keys=['unitId','field','local','remote','base'];
+    // A field can acquire a different conflict after an earlier backup was
+    // restored. Archived comparisons are not limited to the 176 active fields.
+    if(!Array.isArray(value))throw new Error('作品两版对照记录无效。');
+    const seen=new Set();
+    for(const item of value){
+      if(!isPlainObject(item)||Object.keys(item).length!==keys.length||keys.some(key=>!Object.prototype.hasOwnProperty.call(item,key))
+        ||typeof item.unitId!=='string'||!/^(?:[78][ab]-u[1-8]|9a-u[1-8]|9b-u[1-4])$/.test(item.unitId)
+        ||!fields.includes(item.field)||['local','remote','base'].some(key=>typeof item[key]!=='string'||item[key].length>20000))throw new Error('作品两版对照记录无效。');
+      const id=JSON.stringify(keys.map(key=>item[key]));if(seen.has(id))throw new Error('作品两版对照记录重复。');seen.add(id);
+    }
+  }
+
+  function readLiteracyConflictEvidence(){
+    const raw=safeStore.get('englishLiteracyConflictEvidenceV40',null);
+    if(!raw)return [];
+    try{const value=JSON.parse(raw);validateLiteracyConflictEvidence(value);return value;}catch{return [];}
+  }
+
+  function collectLiteracyConflictEvidence(){
+    const identity=item=>JSON.stringify([item.unitId,item.field,item.local,item.remote,item.base]);
+    const merged=new Map(readLiteracyConflictEvidence().map(item=>[identity(item),item]));
+    const active=window.Literacy&&typeof Literacy.conflictEvidence==='function'?Literacy.conflictEvidence():[];
+    validateLiteracyConflictEvidence(active);
+    active.forEach(item=>merged.set(identity(item),item));
+    return [...merged.values()];
+  }
+
+  function renderRestoredLiteracyConflicts(){
+    const records=readLiteracyConflictEvidence(),panel=document.getElementById('restoredLiteracyConflicts'),list=document.getElementById('restoredLiteracyConflictList');
+    if(!panel||!list)return;
+    panel.hidden=!records.length;
+    const labels={evidence:'文本证据与推断',expression:'表达作品',comparison:'文化／观点比较',reflection:'调整与反思'};
+    list.innerHTML=records.map(item=>`<article class="card" style="margin:12px 0"><h4>${escapeHtml(item.unitId)} · ${labels[item.field]}</h4><strong>备份中本页的内容</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(item.local)||'（空白）'}</p><strong>另一页的内容</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(item.remote)||'（空白）'}</p></article>`).join('');
+  }
+
+  function exportRestoredLiteracyConflicts(){
+    const records=readLiteracyConflictEvidence();if(!records.length)return;
+    const lines=['# 恢复时保留的作品两版对照','','这份记录保留双方内容，不自动解决冲突或认定作品质量。',''];
+    records.forEach(item=>lines.push('## '+item.unitId+' · '+item.field,'### 备份中本页的内容',item.local||'（空白）','### 另一页的内容',item.remote||'（空白）',''));
+    downloadText(`作品两版对照_${EnglishCore.dayKey()}.md`,lines.join('\n'),'text/markdown;charset=utf-8');
+  }
+
+  function buildSiteSnapshot(){
+    betaCommitViewTime();
+    saveBetaData();
+    const exportedBetaData={...betaData,learningSessions:EnglishCore.mergeLearningSessions(learningSessions(),window.pendingLearningRecord)};
+    const exportedActiveSession=activeLearningSession&&!exportedBetaData.learningSessions.some(s=>s.id===activeLearningSession.id)
+      ? {...activeLearningSession,elapsedMs:currentLearningElapsed(),resumedAt:null}:null;
+    if(exportedActiveSession){delete exportedActiveSession.reviewEndAt;delete exportedActiveSession.reviewTaskSnapshot;}
+    return {
+      schema:'ai-english-growth-space-snapshot',
+      schemaVersion:1,
+      appVersion:'V4.1.1',
+      learningState:window.LearningApp?LearningApp.snapshot():null,
+      curriculumState:window.Curriculum?Curriculum.snapshot():null,
+      classicsState:window.Classics?Classics.snapshot():null,
+      wordStudyState:window.WordStudy?WordStudy.snapshot():null,
+      wordMemoryState:window.WordMemory?WordMemory.snapshot():null,
+      literacyState:window.Literacy?Literacy.snapshot():null,
+      readWriteState:window.RWStore?RWStore.snapshot():null,
+      literacyConflictEvidence:collectLiteracyConflictEvidence(),
+      exportedAt:new Date().toISOString(),
+      betaData:exportedBetaData,
+      learnerProfile,
+      activeLearningSession:exportedActiveSession,
+      localSettings:{
+        tasks:JSON.stringify(saved),
+        reflection:document.getElementById('reflection').value,
+        studyMode:safeStore.get('studyMode','standard'),
+        selectedVoiceURI:safeStore.get('selectedVoiceURI',''),
+        voiceAccent:safeStore.get('voiceAccent','en-GB'),
+        audioEngine:safeStore.get('audioEngine','natural')
+      }
+    };
+  }
+
+  function exportSiteSnapshot(){
+    const snapshot=buildSiteSnapshot();
+    betaData.backups.unshift({
+      at:snapshot.exportedAt,
+      appVersion:snapshot.appVersion,
+      issueCount:betaData.issues.length,
+      learningSessionCount:learningSessions().length
+    });
+    if(betaData.backups.length>30) betaData.backups=betaData.backups.slice(0,30);
+    saveBetaData();
+    downloadText(
+      `AI英语成长空间_整站快照_${EnglishCore.dayKey()}.json`,
+      JSON.stringify(snapshot,null,2),
+      'application/json;charset=utf-8'
+    );
+    renderIterationCenter();
+    showToast('整站快照已导出，请妥善保存。');
+  }
+
+  function isPlainObject(value){
+    return !!value && typeof value==='object' && !Array.isArray(value);
+  }
+
+  function validateSiteSnapshot(snapshot){
+    if(!isPlainObject(snapshot) || snapshot.schema!=='ai-english-growth-space-snapshot'){
+      throw new Error('文件不是有效的整站快照。');
+    }
+    if(snapshot.schemaVersion!==1){
+      throw new Error('快照版本不受支持，请使用本站导出的整站快照。');
+    }
+    if(!isPlainObject(snapshot.betaData)){
+      throw new Error('快照中的内测数据结构无效。');
+    }
+    const arrayFields=[
+      'sessions','events','issues','audioReviews','parentLogs','audioPlays',
+      'learningSessions','hypotheses','releases','backups'
+    ];
+    if(arrayFields.some(field=>!Array.isArray(snapshot.betaData[field]))){
+      throw new Error('快照中的记录列表不完整或已损坏。');
+    }
+    if(arrayFields.some(field=>snapshot.betaData[field].some(item=>!isPlainObject(item)))){
+      throw new Error('快照中的记录项目无效或已损坏。');
+    }
+    if(!isPlainObject(snapshot.betaData.views) || !isPlainObject(snapshot.betaData.qaChecklist)){
+      throw new Error('快照中的统计或QA数据结构无效。');
+    }
+    if(Object.values(snapshot.betaData.views).some(item=>!isPlainObject(item))){
+      throw new Error('快照中的页面统计记录无效。');
+    }
+    if(snapshot.learnerProfile!==null && !isPlainObject(snapshot.learnerProfile)){
+      throw new Error('快照中的学习设置无效。');
+    }
+    if(!isPlainObject(snapshot.localSettings)){
+      throw new Error('快照中的本机设置无效。');
+    }
+    if(snapshot.learningState!==undefined && snapshot.learningState!==null)EnglishCore.validateState(snapshot.learningState);
+    if(snapshot.curriculumState!==undefined && snapshot.curriculumState!==null)CurriculumCore.validate(snapshot.curriculumState);
+    if(snapshot.classicsState!==undefined && snapshot.classicsState!==null)ClassicsCore.validate(snapshot.classicsState);
+    if(snapshot.wordStudyState!==undefined && snapshot.wordStudyState!==null)WordStudyCore.validate(snapshot.wordStudyState);
+    if(snapshot.wordMemoryState!==undefined && snapshot.wordMemoryState!==null)WordMemoryCore.validate(snapshot.wordMemoryState);
+    if(snapshot.readWriteState!=null)RWStore.validate(snapshot.readWriteState);
+    if(snapshot.literacyState!==undefined && snapshot.literacyState!==null)LiteracyCore.validate(snapshot.literacyState);
+    if(snapshot.literacyConflictEvidence!==undefined && snapshot.literacyConflictEvidence!==null)validateLiteracyConflictEvidence(snapshot.literacyConflictEvidence);
+    if(snapshot.activeLearningSession!=null){
+      const active=snapshot.activeLearningSession;
+      const validId=value=>typeof value==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_:.-]{0,180}$/.test(value);
+      const validDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&EnglishCore.dayKey(value+'T04:00:00Z')===value;
+      const expectedTasks=['standard','light'].includes(active.mode)?EnglishCore.mode(active.mode).tasks:[];
+      if(!isPlainObject(active)||!validId(active.id)||typeof active.startAt!=='string'||!Number.isFinite(Date.parse(active.startAt))
+        ||!Number.isFinite(active.elapsedMs)||active.elapsedMs<0||active.elapsedMs>86400000
+        ||!expectedTasks.length||!Array.isArray(active.taskKeys)||active.taskKeys.length!==expectedTasks.length
+        ||active.taskKeys.some((key,index)=>key!==expectedTasks[index])
+        ||(active.learningDate!==undefined&&!validDay(active.learningDate))
+        ||(active.unitId!=null&&!validId(active.unitId)))throw new Error('快照中的学习计时记录无效。');
+    }
+    const settings=snapshot.localSettings;
+    ['tasks','reflection','studyMode','selectedVoiceURI','voiceAccent','audioEngine'].forEach(field=>{
+      if(typeof settings[field]!=='string'){
+        throw new Error(`快照中的${field}设置无效。`);
+      }
+    });
+    const tasks=JSON.parse(settings.tasks);
+    if(!EnglishCore.validTasks(tasks)){
+      throw new Error('快照中的学习任务数据无效。');
+    }
+    if(!['standard','light'].includes(settings.studyMode))throw new Error('快照中的学习模式无效。');
+  }
+
+  function restoreSnapshotStorage(entries){
+    const previous=entries.map(([key])=>[key,safeStore.get(key,null)]);
+    try{
+      entries.forEach(([key,value])=>{
+        const saved=value===null?safeStore.remove(key):safeStore.set(key,value);
+        if(!saved) throw new Error('浏览器存储空间不足或不可用。');
+      });
+    }catch(error){
+      // Free only changed incoming values first. Restoring a larger original
+      // before removing a newly added value can exceed the same storage quota.
+      const changed=previous.filter(([key,value])=>safeStore.get(key,null)!==value);
+      changed.forEach(([key])=>safeStore.remove(key));
+      changed.forEach(([key,value])=>{if(value!==null)safeStore.set(key,value);});
+      if(previous.some(([key,value])=>safeStore.get(key,null)!==value)){
+        const recoveryError=new Error('浏览器存储暂不可用，部分原记录未能写回；请先下载恢复前记录，保留此页面。');
+        recoveryError.rollbackIncomplete=true;
+        recoveryError.previousStorage=previous;
+        throw recoveryError;
+      }
+      throw error;
+    }
+  }
+
+  function exportRestoreRecovery(){
+    if(!window.pendingRestoreSnapshot)return;
+    downloadText(`恢复前学习记录_${EnglishCore.dayKey()}.json`,JSON.stringify(window.pendingRestoreSnapshot,null,2),'application/json;charset=utf-8');
+    showToast('恢复前记录已导出。请确认文件已保存，再到可用浏览器中恢复。');
+  }
+
+  function importSiteSnapshot(file){
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      let recoverySnapshot=null;
+      try{
+        const snapshot=JSON.parse(reader.result);
+        validateSiteSnapshot(snapshot);
+        const confirmed=window.confirm(
+          `请先关闭其他打开的本站页面。将恢复${snapshot.exportedAt?new Date(snapshot.exportedAt).toLocaleString('zh-CN'):'未知时间'}的快照，覆盖其中包含的本机记录。旧快照没有的词汇积累、作品档案及中考读写记录会保留。是否继续？`
+        );
+        if(!confirmed) return;
+        const settings=snapshot.localSettings;
+        const restoredTasks=JSON.parse(settings.tasks);
+        restoredTasks._date=restoredTasks._date||EnglishCore.dayKey(snapshot.exportedAt)||EnglishCore.dayKey();
+        window.restoringSnapshot=true;
+        // Capture a usable whole-site backup before touching any storage key.
+        // The restoring flag suppresses incidental autosaves while capturing it.
+        recoverySnapshot=JSON.parse(JSON.stringify(buildSiteSnapshot()));
+        restoreSnapshotStorage([
+          [BETA_STORAGE_KEY,JSON.stringify(snapshot.betaData)],
+          [LEARNER_PROFILE_KEY,snapshot.learnerProfile?JSON.stringify(snapshot.learnerProfile):null],
+          [ACTIVE_LEARNING_SESSION_KEY,snapshot.activeLearningSession?JSON.stringify({...snapshot.activeLearningSession,resumedAt:null,restoredAt:new Date().toISOString()}):null],
+          ['englishLearningStateV24',JSON.stringify(EnglishCore.normalizeState(snapshot.learningState||{}))],
+          ...(snapshot.curriculumState?[['englishCurriculumStateV30',JSON.stringify(CurriculumCore.normalize(snapshot.curriculumState))]]:[]),
+          ...(snapshot.classicsState?[['englishClassicsStateV31',JSON.stringify(ClassicsCore.normalize(snapshot.classicsState))]]:[]),
+          ...(snapshot.wordStudyState?[['englishWordStudyV35',JSON.stringify(WordStudyCore.normalize(snapshot.wordStudyState))]]:[]),
+          ...(snapshot.wordMemoryState?[['englishWordMemoryV40',JSON.stringify(WordMemoryCore.normalize(snapshot.wordMemoryState))]]:[]),
+          ...(snapshot.readWriteState?RWStore.entries(snapshot.readWriteState):[]),
+          ...(snapshot.literacyState?[['englishLiteracyV40',JSON.stringify(LiteracyCore.normalize(snapshot.literacyState))]]:[]),
+          ...(snapshot.literacyConflictEvidence?[['englishLiteracyConflictEvidenceV40',JSON.stringify(snapshot.literacyConflictEvidence)]]:[]),
+          ['englishGrowthTasks',JSON.stringify(restoredTasks)],
+          ['englishReflection',settings.reflection],
+          ['studyMode',settings.studyMode],
+          ['selectedVoiceURI',settings.selectedVoiceURI],
+          ['voiceAccent',settings.voiceAccent],
+          ['audioEngine',settings.audioEngine]
+        ]);
+        betaData=snapshot.betaData;
+        window.alert('快照恢复成功，页面将重新加载。'+(snapshot.literacyConflictEvidence?.length?'作品两版对照已保存在“备份管理”中，可查看和导出后再处理。':''));
+        window.location.reload();
+      }catch(error){
+        window.restoringSnapshot=false;
+        if(error.rollbackIncomplete && recoverySnapshot){
+          // Preserve the exact prior raw values as additional recovery evidence;
+          // normal import still strictly validates the supported snapshot fields.
+          recoverySnapshot.restoreStorageRecovery=error.previousStorage;
+          window.pendingRestoreSnapshot=recoverySnapshot;
+          const warning=document.getElementById('restoreRecoveryWarning');
+          if(warning)warning.hidden=false;
+        }
+        window.alert(`恢复失败：${error.message}`);
+      }
+    };
+    reader.readAsText(file,'utf-8');
+  }
+
+  function renderHypotheses(){
+    const container=document.getElementById('hypothesisList');
+    if(!container) return;
+    container.innerHTML=betaData.hypotheses.map(item=>`
+      <article class="hypothesis-card" data-hypothesis-id="${escapeHtml(item.id)}">
+        <div class="hypothesis-top">
+          <h4>${escapeHtml(item.title)}</h4>
+          <select data-hypothesis-field="status">
+            <option value="untested" ${item.status==='untested'?'selected':''}>尚未验证</option>
+            <option value="need_data" ${item.status==='need_data'?'selected':''}>证据不足</option>
+            <option value="pass" ${item.status==='pass'?'selected':''}>验证通过</option>
+            <option value="fail" ${item.status==='fail'?'selected':''}>验证失败</option>
+          </select>
+        </div>
+        <textarea data-hypothesis-field="evidence" rows="2" placeholder="填写真实证据，例如：连续3天孩子无需提醒即可开始。">${escapeHtml(item.evidence||'')}</textarea>
+        <div class="hypothesis-actions">
+          <button type="button" data-delete-hypothesis="${escapeHtml(item.id)}">删除</button>
+        </div>
+      </article>
+    `).join('');
+
+    container.querySelectorAll('[data-hypothesis-field]').forEach(control=>{
+      control.addEventListener('change',()=>{
+        const card=control.closest('[data-hypothesis-id]');
+        const item=betaData.hypotheses.find(h=>h.id===card.dataset.hypothesisId);
+        if(!item) return;
+        item[control.dataset.hypothesisField]=control.value;
+        item.updatedAt=new Date().toISOString();
+        saveBetaData();
+        renderIterationCenter();
+      });
+    });
+    container.querySelectorAll('textarea[data-hypothesis-field]').forEach(control=>{
+      control.addEventListener('blur',()=>{
+        const card=control.closest('[data-hypothesis-id]');
+        const item=betaData.hypotheses.find(h=>h.id===card.dataset.hypothesisId);
+        if(!item) return;
+        item.evidence=control.value.trim();
+        item.updatedAt=new Date().toISOString();
+        saveBetaData();
+        renderIterationCenter();
+      });
+    });
+    container.querySelectorAll('[data-delete-hypothesis]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        betaData.hypotheses=betaData.hypotheses.filter(h=>h.id!==button.dataset.deleteHypothesis);
+        saveBetaData();
+        renderIterationCenter();
+      });
+    });
+  }
+
+  function addHypothesis(){
+    const title=window.prompt('请输入需要验证的具体假设：');
+    if(!title?.trim()) return;
+    betaData.hypotheses.push({
+      id:uid('hyp'),
+      title:title.trim(),
+      status:'untested',
+      evidence:'',
+      createdAt:new Date().toISOString()
+    });
+    saveBetaData();
+    renderIterationCenter();
+  }
+
+  function renderWorkflow(){
+    const container=document.getElementById('workflowList');
+    if(!container) return;
+    const priority=document.getElementById('workflowPriorityFilter')?.value||'all';
+    const status=document.getElementById('workflowStatusFilter')?.value||'all';
+    const issues=betaData.issues.filter(issue=>
+      (priority==='all'||issue.priority===priority) &&
+      (status==='all'||issue.status===status)
+    );
+    container.innerHTML=issues.length?issues.map(issue=>`
+      <article class="workflow-card" data-workflow-id="${escapeHtml(issue.id)}">
+        <div class="workflow-main">
+          <div class="issue-top">
+            <span class="issue-priority ${escapeHtml(issue.priority)}">${escapeHtml(issue.priority)}</span>
+            <small>${escapeHtml(ISSUE_STATUS_LABELS[issue.status]||issue.status)}</small>
+          </div>
+          <h4>${escapeHtml(issue.title)}</h4>
+          <p><strong>${escapeHtml(issue.category)}</strong> · ${escapeHtml(issue.details)}</p>
+          <p>页面：${escapeHtml(issue.viewName||VIEW_NAMES[issue.view]||issue.view)} · ${new Date(issue.createdAt).toLocaleString('zh-CN')}</p>
+        </div>
+        <div class="workflow-side">
+          <label>当前状态
+            <select data-workflow-field="status">
+              ${Object.entries(ISSUE_STATUS_LABELS).map(([value,label])=>`<option value="${value}" ${issue.status===value?'selected':''}>${label}</option>`).join('')}
+            </select>
+          </label>
+          <label>修复版本
+            <input data-workflow-field="fixedIn" value="${escapeHtml(issue.fixedIn||'')}" placeholder="例如 V2.4">
+          </label>
+          <label>修复说明
+            <textarea data-workflow-field="fixNote" rows="2" placeholder="具体修改了什么">${escapeHtml(issue.fixNote||'')}</textarea>
+          </label>
+          <label>复测结果
+            <textarea data-workflow-field="retestNote" rows="2" placeholder="由谁、何时、如何复测">${escapeHtml(issue.retestNote||'')}</textarea>
+          </label>
+          <button class="workflow-save" type="button" data-save-workflow="${escapeHtml(issue.id)}">保存更新</button>
+        </div>
+      </article>
+    `).join(''):'<div class="empty-state">当前筛选条件下没有问题。</div>';
+
+    container.querySelectorAll('[data-save-workflow]').forEach(button=>{
+      button.addEventListener('click',()=>{
+        const card=button.closest('[data-workflow-id]');
+        const issue=betaData.issues.find(i=>i.id===card.dataset.workflowId);
+        if(!issue) return;
+        card.querySelectorAll('[data-workflow-field]').forEach(control=>{
+          issue[control.dataset.workflowField]=control.value.trim();
+        });
+        issue.updatedAt=new Date().toISOString();
+        issue.resolvedAt=issue.status==='resolved'?new Date().toISOString():null;
+        betaTrackEvent('issue_workflow_updated',{issueId:issue.id,status:issue.status});
+        saveBetaData();
+        renderBetaDashboard();
+        renderIterationCenter();
+        showToast('问题修复与复测记录已保存。');
+      });
+    });
+  }
+
+  function renderQaChecklist(){
+    const container=document.getElementById('qaChecklist');
+    if(!container) return;
+    container.innerHTML=QA_ITEMS.map(item=>`
+      <label class="qa-row">
+        <input type="checkbox" data-qa-id="${item.id}" ${betaData.qaChecklist[item.id]?'checked':''}>
+        <span>
+          <strong>${escapeHtml(item.title)}</strong>
+          <small>${escapeHtml(item.note)}</small>
+        </span>
+        <em class="${item.critical?'critical':''}">${item.critical?'关键':'建议'}</em>
+      </label>
+    `).join('');
+    container.querySelectorAll('[data-qa-id]').forEach(box=>{
+      box.addEventListener('change',()=>{
+        betaData.qaChecklist[box.dataset.qaId]=box.checked;
+        saveBetaData();
+        renderIterationCenter();
+      });
+    });
+    const done=QA_ITEMS.filter(item=>betaData.qaChecklist[item.id]).length;
+    const percent=Math.round(done/QA_ITEMS.length*100);
+    document.getElementById('qaProgressText').textContent=`${done}/${QA_ITEMS.length} · ${percent}%`;
+    document.getElementById('qaProgressBar').style.width=`${percent}%`;
+  }
+
+  function saveReleaseRecord(){
+    const version=document.getElementById('releaseVersionInput').value.trim();
+    const summary=document.getElementById('releaseSummaryInput').value.trim();
+    const retest=document.getElementById('releaseRetestInput').value.trim();
+    if(!version||!summary){
+      showToast('请填写候选版本号和主要修改。');
+      return;
+    }
+    betaData.releases.unshift({
+      id:uid('release'),
+      version,
+      summary,
+      retest,
+      gate:calculateReleaseGate(),
+      createdAt:new Date().toISOString()
+    });
+    saveBetaData();
+    document.getElementById('releaseSummaryInput').value='';
+    document.getElementById('releaseRetestInput').value='';
+    renderIterationCenter();
+    showToast('候选版本记录已保存。');
+  }
+
+  function renderReleaseHistory(){
+    const container=document.getElementById('releaseHistory');
+    if(!container) return;
+    container.innerHTML=betaData.releases.length?betaData.releases.map(record=>`
+      <article class="release-record">
+        <h4>${escapeHtml(record.version)}</h4>
+        <p>${escapeHtml(record.summary)}</p>
+        ${record.retest?`<p><strong>复测：</strong>${escapeHtml(record.retest)}</p>`:''}
+        <small>${new Date(record.createdAt).toLocaleString('zh-CN')} · 门禁 ${record.gate?.passed||0}/${record.gate?.total||7}</small>
+      </article>
+    `).join(''):'<div class="empty-state">还没有候选版本记录。</div>';
+  }
+
+  function calculateReleaseGate(){
+    const sessions=learningSessions();
+    const uniqueDays=new Set(sessions.map(s=>dateKey(s.endAt||s.startAt))).size;
+    const avgCompletion=sessions.length
+      ?Math.round(sessions.reduce((sum,s)=>sum+(s.taskCompletion||0),0)/sessions.length)
+      :0;
+    const p0=activeIssues().filter(i=>i.priority==='P0').length;
+    const p1=activeIssues().filter(i=>i.priority==='P1').length;
+    const audioP0=activeIssues().filter(i=>i.priority==='P0'&&i.category==='发音不准确').length;
+    const lastBackup=betaData.backups[0]?.at?new Date(betaData.backups[0].at).getTime():0;
+    const backupFresh=lastBackup && Date.now()-lastBackup<=7*24*60*60*1000;
+    const criticalQa=QA_ITEMS.filter(item=>item.critical);
+    const qaCriticalDone=criticalQa.every(item=>betaData.qaChecklist[item.id]);
+    const hypothesesWithEvidence=betaData.hypotheses.filter(h=>h.status!=='untested'&&h.evidence?.trim()).length;
+
+    const items=[
+      {title:'真实使用≥5天',ok:uniqueDays>=5,detail:`当前${uniqueDays}天`},
+      {title:'P0问题清零',ok:p0===0,detail:`当前${p0}个`},
+      {title:'P1问题≤2',ok:p1<=2,detail:`当前${p1}个`},
+      {title:'平均完成度≥80%',ok:avgCompletion>=80,detail:`当前${avgCompletion}%`},
+      {title:'发音P0清零',ok:audioP0===0,detail:`当前${audioP0}个`},
+      {title:'7天内已备份',ok:!!backupFresh,detail:backupFresh?'已完成':'未完成'},
+      {title:'关键QA已完成',ok:qaCriticalDone,detail:`假设证据${hypothesesWithEvidence}项`}
+    ];
+    return {items,passed:items.filter(i=>i.ok).length,total:items.length,uniqueDays,p0,p1,avgCompletion,audioP0,qaCriticalDone};
+  }
+
+  function renderReleaseGate(){
+    const gate=calculateReleaseGate();
+    const gateBox=document.getElementById('releaseGate');
+    document.getElementById('releaseGateScore').textContent=`${gate.passed} / ${gate.total}`;
+    gateBox.classList.remove('pass','blocked','caution');
+    let title='继续家庭自用验证';
+    let description='证据不足或仍有关键问题，暂不扩大测试范围。';
+    let css='caution';
+    if(gate.p0>0){
+      title='停止扩展，立即修复P0';
+      description=`当前仍有${gate.p0}个P0问题。错误内容、错误发音或不能使用的问题必须先清零。`;
+      css='blocked';
+    }else if(gate.passed===gate.total){
+      title='本机试用检查已完成';
+      description='可以固化Unit 1模板，并邀请第二个家庭进行小范围测试；仍不等于可以正式商业化。';
+      css='pass';
+    }else if(gate.uniqueDays>=5){
+      title='进入修复与第二轮复测';
+      description='已积累初步证据，集中修复P1并重新验证，不增加商业功能。';
+    }
+    gateBox.classList.add(css);
+    document.getElementById('releaseGateTitle').textContent=title;
+    document.getElementById('releaseGateDescription').textContent=description;
+    document.getElementById('iterationDecisionTitle').textContent=title;
+    document.getElementById('iterationDecisionText').textContent=description;
+    document.getElementById('gateGrid').innerHTML=gate.items.map(item=>`
+      <article class="gate-item ${item.ok?'ok':'no'}">
+        <strong>${escapeHtml(item.title)}</strong>
+        <p>${escapeHtml(item.detail)}</p>
+        <span class="gate-state">${item.ok?'通过':'未通过'}</span>
+      </article>
+    `).join('');
+  }
+
+  function renderBackupStatus(){
+    const element=document.getElementById('backupStatus');
+    if(!element) return;
+    const latest=betaData.backups[0];
+    element.textContent=latest
+      ?`最近备份：${new Date(latest.at).toLocaleString('zh-CN')}，包含${latest.learningSessionCount}次学习会话和${latest.issueCount}个问题。`
+      :'尚未创建整站备份。升级网页前必须先备份。';
+  }
+
+  function renderIterationCenter(){
+    if(!document.getElementById('releaseGate')) return;
+    ensureIterationDefaults();
+    renderBackupStatus();
+    renderHypotheses();
+    renderWorkflow();
+    renderQaChecklist();
+    renderReleaseHistory();
+    renderReleaseGate();
+  }
+
+  function exportIterationReport(){
+    const gate=calculateReleaseGate();
+    const report=[
+      '# AI英语成长空间｜V4.1.1迭代报告',
+      '',
+      `- 导出时间：${new Date().toLocaleString('zh-CN')}`,
+      `- 本机试用检查（非网站部署状态）：${gate.passed}/${gate.total}`,
+      `- 真实使用天数：${gate.uniqueDays}`,
+      `- P0待处理：${gate.p0}`,
+      `- P1待处理：${gate.p1}`,
+      `- 平均任务完成度：${gate.avgCompletion}%`,
+      '',
+      '## 产品假设',
+      ...betaData.hypotheses.map((h,i)=>`${i+1}. [${h.status}] ${h.title}｜证据：${h.evidence||'无'}`),
+      '',
+      '## 活跃问题',
+      ...activeIssues().map((i,index)=>`${index+1}. [${i.priority}/${ISSUE_STATUS_LABELS[i.status]}] ${i.title}｜修复版本：${i.fixedIn||'未定'}｜修复：${i.fixNote||'无'}｜复测：${i.retestNote||'无'}`),
+      '',
+      '## QA清单',
+      ...QA_ITEMS.map((item,i)=>`${i+1}. [${betaData.qaChecklist[item.id]?'完成':'未完成'}] ${item.title}`),
+      '',
+      '## 候选版本',
+      ...betaData.releases.map((r,i)=>`${i+1}. ${r.version}｜${r.summary}｜复测：${r.retest||'无'}`)
+    ].join('\n');
+    downloadText(
+      `AI英语成长空间_V4.1.1迭代报告_${EnglishCore.dayKey()}.md`,
+      report,
+      'text/markdown;charset=utf-8'
+    );
+  }
+
+  document.getElementById('exportSiteSnapshot').addEventListener('click',exportSiteSnapshot);
+  document.getElementById('downloadFullBackup').addEventListener('click',exportSiteSnapshot);
+  document.getElementById('importSiteSnapshot').addEventListener('change',event=>{
+    importSiteSnapshot(event.target.files?.[0]);
+    event.target.value='';
+  });
+  document.getElementById('addHypothesis').addEventListener('click',addHypothesis);
+  document.getElementById('workflowPriorityFilter').addEventListener('change',renderIterationCenter);
+  document.getElementById('workflowStatusFilter').addEventListener('change',renderIterationCenter);
+  document.getElementById('saveReleaseRecord').addEventListener('click',saveReleaseRecord);
+  document.getElementById('createReleaseCandidate').addEventListener('click',()=>{
+    openView('iteration');
+    document.getElementById('releaseVersionInput').focus();
+  });
+  document.getElementById('exportIterationReport').addEventListener('click',exportIterationReport);
+
+  const renderBetaDashboardBeforeIteration=renderBetaDashboard;
+  renderBetaDashboard=function(){
+    renderBetaDashboardBeforeIteration();
+    if(document.getElementById('releaseGate')) renderIterationCenter();
+  };
+
+  ensureIterationDefaults();
+  renderIterationCenter();
+
+  betaStartSession();
+  if(!betaData.views[betaCurrentView]) betaData.views[betaCurrentView]={visits:0,ms:0};
+  betaData.views[betaCurrentView].visits+=1;
+  renderBetaDashboard();
+
+</script>
+<script data-bundled-src="learning-app.js">
+(function () {
+  'use strict';
+  const C=window.EnglishCore, key='englishLearningStateV24';
+  const $=id=>document.getElementById(id), esc=escapeHtml;
+  let state;try{state=C.normalizeState(JSON.parse(safeStore.get(key,'{}')));}catch{state=C.normalizeState({});}
+  const groups=window.ENGLISH_EXERCISES.groups, names={listening:'听力',vocabulary:'词汇',grammar:'语法',reading:'阅读',writing:'写作自查'};
+  let currentExercise='', saving=false, recorder=null, mediaStream=null, recordUrl='', recordStart=0, recordingTimer=null, recordingBusy=false, pendingSpeakingRecord=null;
+  const rawTasks=(()=>{try{return JSON.parse(safeStore.get('englishGrowthTasks','{}'));}catch{return {};}})();
+  if(rawTasks?._date && rawTasks._date!==C.dayKey()) state.days[rawTasks._date]={...C.dayRecord(state,rawTasks._date),tasks:rawTasks,reflection:safeStore.get('englishReflection','')};
+  const todayRecord=C.dayRecord(state);
+  if(rawTasks?._date!==C.dayKey()){
+    saved={...todayRecord.tasks,_date:C.dayKey()};
+    $('reflection').value=todayRecord.reflection||'';
+    safeStore.set('englishReflection',$('reflection').value);
+  }
+
+  function save(){
+    if(saving||window.restoringSnapshot)return {% endraw %}

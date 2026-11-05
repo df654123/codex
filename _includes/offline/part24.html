@@ -1,0 +1,495 @@
+{% raw %}04',english:'LISTEN & RESPOND',title:'听取与回应',body:'先听取关键信息，再用完整句回应。录音后回听，检查意思、理由与清晰度。',check:'我能回应问题，并补充一个细节。',state:status(progress,'listening')+status(progress,'speaking'),actions:button('听力练习 →','exercise','listening')+button('口语与回听','speaking')},
+      {id:'writing',number:'05',english:'A VIEW WITH REASONS',title:'观点表达与写作',body:'明确写给谁、为什么写。用观点、理由与例子组织段落，完成后逐项自查。',check:'我能用理由和例子支持一个观点。',state:status(progress,'writing'),actions:button('写作与自查 →','exercise','writing')},
+      {id:'culture',number:'06',english:'LANGUAGE & THE WORLD',title:'真实语境与文化',body:'从故事、科学和日常生活中认识不同经验。核对来源与时间，比较观点，尊重差异。',check:'我能区分事实、观点与自己的建议。',state:'<span class="ep-status ep-extra">拓展阅读 · 不计入六环节</span>',actions:button('打开阅读书架 →','classics')+button('本单元阅读','reading')}
+    ];
+    root.innerHTML = `<header class="ep-heading"><div><span class="ep-kicker">YOUR NEXT STEP</span><h2>知道学什么，也知道怎么练</h2><p>以初中译林单元学习为主，把日常积累连成理解与表达的能力。高考能力衔接作为长线方向，先把眼前一个单元学扎实。</p></div><span class="ep-scope">能力训练导引</span></header>
+      <section class="ep-hero" aria-labelledby="epUnitTitle"><div class="ep-hero-copy"><span class="ep-kicker">从当前单元出发 · ${esc(unitLabel)}</span><h3 id="epUnitTitle" lang="en">${esc(unit.title)}</h3><p>${esc(unit.theme)}</p><span class="ep-edition">${esc(book ? book.editionLabel : '')}</span><div class="ep-actions">${button('继续下一环节 →','continue','',true)}${button('选择其他单元','course')}</div></div><div class="ep-progress"><span>当前单元的活动记录</span><strong>${progress.done} <small>/ 6</small></strong><div class="ep-progress-track" role="progressbar" aria-label="当前单元已完成活动" aria-valuemin="0" aria-valuemax="6" aria-valuenow="${progress.done}"><span style="width:${progress.percent}%"></span></div><div class="ep-milestones">${Object.keys(names).map(kind => status(progress,kind)).join('')}</div></div></section>
+      <p class="ep-honesty"><strong>完成不等于掌握。</strong>这里记录已做过的学习活动，不是能力评分。隔一段时间独立重做、解释答案依据，并在新情境中运用，才能判断自己是否学会。</p>
+      <section class="ep-section" aria-labelledby="epAbilitiesTitle"><div class="ep-section-head"><span class="ep-kicker">SIX ABILITIES, ONE UNIT</span><h3 id="epAbilitiesTitle">把一个单元，练成六种能力</h3><p>选择你现在最需要的一项。所有练习仍使用当前单元，答案解析、错题和草稿沿用原有记录。</p></div><div class="ep-ability-grid">${cards.map(card => `<article class="ep-ability-card" data-exam-card="${card.id}"><div class="ep-card-top"><span class="ep-card-number">${card.number}</span><span class="ep-kicker">${card.english}</span></div><h4>${card.title}</h4><p>${card.body}</p><div class="ep-card-status">${card.state}</div><p class="ep-selfcheck"><span>练完问自己</span>${card.check}</p><div class="ep-card-actions">${card.actions}</div></article>`).join('')}</div></section>
+      <section class="ep-section ep-route" aria-labelledby="epRouteTitle"><div class="ep-section-head"><span class="ep-kicker">A COMPLETE LEARNING LOOP</span><h3 id="epRouteTitle">从学习到复盘，走完这一小步</h3><p>从“继续下一环节”开始会记录本次学习；练习后看解析，再用自己的表达检验理解。</p></div><ol class="ep-flow">
+        <li><span>01</span><h4>选单元</h4><p>对照学校正在使用的教材，确定本次主题。</p>${button('选择单元','course')}</li>
+        <li><span>02</span><h4>学习</h4><p>看词汇例句，读懂语法与主题内容。</p>${button('学习词汇','words')}</li>
+        <li><span>03</span><h4>练习与解析</h4><p>进入下一未完成环节，作答后核对依据。</p>${button('继续练习','continue')}</li>
+        <li><span>04</span><h4>错题</h4><p>看清错误原因，重新练习对应的一组题。</p>${button('回看错题','mistakes')}</li>
+        <li><span>05</span><h4>表达自查</h4><p>用完整句说清观点，再检查写作草稿。</p>${button('写作自查','exercise','writing')}</li>
+        <li><span>06</span><h4>保存复盘</h4><p>结束进行中的学习并自评，回看成长记录。</p>${button('结束并自评','review')}${button('成长档案','growth')}</li>
+      </ol><div class="ep-backup"><p>练习、错题与表达记录继续保存在本站。需要换设备或保留副本时，可导出整站备份。</p>${button('备份学习记录','backup')}</div></section>
+      ${sourceReadings()}${examSources()}`;
+  }
+
+  function openAndFocus(view, id) {
+    window.openView(view);
+    const target = document.getElementById(id);
+    if (target) { target.setAttribute('tabindex','-1'); target.scrollIntoView({block:'start',behavior:'instant'}); target.focus({preventScroll:true}); }
+  }
+  root.addEventListener('click', event => {
+    const target = event.target.closest('[data-ep-action]');
+    if (!target || !root.contains(target)) return;
+    const app = window.Curriculum, action = target.dataset.epAction;
+    if (action === 'continue') app.continueLearning();
+    if (action === 'words') app.openWords();
+    if (action === 'grammar') { window.openView('course'); const heading = document.getElementById('cxGrammar'); if (heading) heading.scrollIntoView({block:'start',behavior:'instant'}); }
+    if (action === 'exercise' && ['vocabulary','grammar','reading','listening','writing'].includes(target.dataset.epKind)) app.openExercise(target.dataset.epKind);
+    if (action === 'reading') {
+      if (typeof app.openTask === 'function') app.openTask('reading');
+      else app.selectUnit(app.unit().id,'reading');
+    }
+    if (['course','speaking','classics','growth'].includes(action)) window.openView(action);
+    if (action === 'mistakes') openAndFocus('growth','mistakeList');
+    if (action === 'review' && typeof window.requestFinishLearningSession === 'function') window.requestFinishLearningSession();
+    if (action === 'backup' && typeof window.exportSiteSnapshot === 'function') window.exportSiteSnapshot();
+  });
+  const previousOpenView = window.openView;
+  if (typeof previousOpenView === 'function') window.openView = function (...args) {
+    const result = previousOpenView.apply(this,args);
+    if (args[0] === 'exam') render();
+    return result;
+  };
+  window.ExamPath = {refresh:render};
+  render();
+})();
+
+</script>
+<script data-bundled-src="word-study-app.js">
+(function () {
+  'use strict';
+  const C = window.WordStudyCore, D = window.ENGLISH_CURRICULUM, curriculum = window.Curriculum;
+  const root = document.getElementById('wordStudyRoot');
+  if (!root || !C || !D?.units?.length || !curriculum) return;
+  const $ = id => document.getElementById(id), esc = escapeHtml;
+  const storageKey = 'englishWordStudyV35', books = new Map(D.books.map(book => [book.id, book]));
+  const units = new Map(D.units.map(unit => [unit.id, unit]));
+  const dirtyKeys = new Set();
+  let state, mode = 'cards', filter = 'all', round = null, saveFailed = false, notice = '', saving = false;
+  try { state = C.normalize(JSON.parse(safeStore.get(storageKey, '{}'))); }
+  catch { state = C.normalize({}); notice = '已跳过损坏的本地记录，可以继续学习。'; }
+  const unit = () => curriculum.unit();
+  const button = (label, action, value = '', css = 'outline-btn', disabled = false) => `<button type="button" class="${css}" data-ws-action="${action}" data-value="${esc(value)}"${disabled ? ' disabled' : ''}>${esc(label)}</button>`;
+  const selected = (value, current) => value === current ? ' selected' : '';
+  function startRound() {
+    const current = unit();
+    round = {unitId:current.id,queue:C.filterWords(state,current,filter),cursor:0,card:null};
+    if (round.queue.length) round.card = C.createCard(current.id, round.queue[0]);
+  }
+  function syncUnit() {
+    if (!round || round.unitId !== unit().id) { startRound(); notice = ''; return true; }
+    if (round.card && (round.card.rated || round.card.checked) && !state.records[C.key(round.card.unitId,round.card.index)]) {
+      round.card = C.createCard(round.card.unitId,round.card.index);
+      return true;
+    }
+    return false;
+  }
+  function preserveInput() {
+    if (round?.unitId === unit().id && mode === 'spelling' && round.card && !round.card.checked) {
+      const input = $('wsSpellingInput');
+      if (input) round.card.input = input.value;
+    }
+  }
+  function latestStored(fallback) {
+    for (const raw of [safeStore.get(storageKey,null),fallback]) {
+      if (typeof raw !== 'string') continue;
+      try { const incoming = JSON.parse(raw); C.validate(incoming); return C.normalize(incoming); }
+      catch {}
+    }
+    return fallback === null ? C.normalize({}) : null;
+  }
+  function mergeDirty(latest) {
+    for (const recordKey of dirtyKeys) if (state.records[recordKey]) latest.records[recordKey] = {...state.records[recordKey]};
+    return latest;
+  }
+  function save(recordKey) {
+    dirtyKeys.add(recordKey);
+    if (window.restoringSnapshot) return false;
+    state = mergeDirty(latestStored() || C.normalize(state));
+    saving = true;
+    const ok = safeStore.set(storageKey, JSON.stringify(state));
+    saving = false;
+    saveFailed = !ok;
+    if (ok) dirtyKeys.clear();
+    return ok;
+  }
+  function saveReview(card) {
+    const ok = save(C.key(card.unitId, card.index));
+    if (ok && typeof curriculum.markWordReviewed === 'function') curriculum.markWordReviewed(unit().vocabulary[card.index].word, card.unitId);
+  }
+  function renderStats(current) {
+    const stats = C.stats(state,current);
+    return `<section class="ws-stats" aria-label="本单元学习统计"><article><span>记忆卡已自评</span><strong>${stats.reviewed} <small>/ ${stats.total}</small></strong></article><article><span>生词与待加强</span><strong>${stats.needsWork}<small> 个</small></strong></article><article><span>今天待复习</span><strong>${stats.due}<small> 个</small></strong></article><article><span>拼写答对 / 已检查</span><strong>${stats.spellingCorrect} <small>/ ${stats.spellingCorrect+stats.spellingWrong}</small></strong></article></section>
+      <div class="ws-progress-copy"><span>本单元记忆卡自评覆盖 ${stats.reviewed}/${stats.total}</span><strong>${stats.percent}%</strong></div><div class="ws-progress" role="progressbar" aria-label="本单元记忆卡自评覆盖" aria-valuemin="0" aria-valuemax="${stats.total}" aria-valuenow="${stats.reviewed}"><span style="width:${stats.percent}%"></span></div><p class="ws-fine-print">口头自评：记住 ${stats.oralRemembered} 次 · 再学 ${stats.oralHard} 次；拼写：答对 ${stats.spellingCorrect} 次 · 待订正 ${stats.spellingWrong} 次。活动记录与拼写分开统计，不代表已经掌握。</p>`;
+  }
+  function renderCard(current) {
+    const card = round.card;
+    if (!round.queue.length) return `<section class="ws-empty"><span class="ws-empty-symbol" aria-hidden="true">✓</span><h3>${filter === 'due' ? '本单元暂时没有到期词' : '当前筛选没有待学词'}</h3><p>可以切回全部词，继续练习本单元的精选词汇。</p>${button('查看全部词','filter','all','primary-btn')}</section>`;
+    if (!card) return `<section class="ws-empty"><span class="ws-empty-symbol" aria-hidden="true">✓</span><h3>这一轮练完了</h3><p>已走完本轮 ${round.queue.length} 个词。换一种方式再练，或按到期计划回来复习。</p><div class="ws-actions">${button('再练一轮','restart','','primary-btn')}${button(mode === 'cards' ? '试试拼写' : '回到记忆卡','mode',mode === 'cards' ? 'spelling' : 'cards')}${filter !== 'all' ? button('查看全部词','filter','all') : ''}</div></section>`;
+    const word = current.vocabulary[card.index], record = state.records[C.key(current.id,card.index)];
+    const eyebrow = `<div class="ws-card-top"><span class="cx-kicker">${mode === 'cards' ? 'RECALL THE MEANING' : 'SPELL FROM MEMORY'}</span><span>本轮 ${round.cursor+1} / ${round.queue.length}</span></div>`;
+    if (mode === 'cards') return `<article class="ws-card">${eyebrow}<div class="ws-prompt"><p>先回想词义，再揭晓核对</p><h3 id="wsWordTitle" lang="en" tabindex="-1">${esc(word.word)}</h3>${button('▶ 朗读单词','audio','','ws-audio')}</div>
+      ${card.revealed ? `<div class="ws-answer" aria-live="polite"><p class="ws-meaning">${esc(word.meaning)}</p><p lang="en">${esc(word.example)}</p>${button('▶ 朗读例句','example-audio','','ws-audio')}</div>` : '<div class="ws-answer-placeholder"><span aria-hidden="true">?</span><p>词义和例句已收起，给自己几秒回想。</p></div>'}
+      <div class="ws-card-footer">${card.rated ? `<p class="ws-feedback" role="status">${card.rating === 'remembered' ? '已记下本次“记住”自评' : '已加入待加强词'} · 下次复习：${record.due}${record.due === C.dayKey() ? '（今天）' : ''}</p><div class="ws-actions">${button(round.cursor+1 === round.queue.length ? '下一词 · 完成本轮' : '下一词 →','next','','primary-btn')}</div>` : `<div class="ws-actions">${!card.revealed ? button('揭晓词义与例句','reveal','','primary-btn') : ''}${button('再学一次','hard','','outline-btn',!card.revealed)}${button('我记住了','remembered','','primary-btn',!card.revealed)}</div><p class="ws-fine-print">${card.revealed ? '如实自评，选择后再进入下一词。' : '请先揭晓，再评价本次记忆情况。'}</p>`}</div></article>`;
+    return `<article class="ws-card">${eyebrow}<div class="ws-prompt ws-spelling-prompt"><p>根据中文，写出本单元的英语单词或短语</p><h3 id="wsWordTitle" tabindex="-1">${esc(word.meaning)}</h3></div><form id="wsSpellingForm" class="ws-spelling-form"><label for="wsSpellingInput">我的拼写</label><input id="wsSpellingInput" name="spelling" type="text" value="${esc(card.input)}" maxlength="160" lang="en" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="输入英文后检查"${card.checked ? ' readonly' : ''} aria-describedby="wsSpellingHint"><p id="wsSpellingHint" class="ws-fine-print">忽略首尾空格、大小写和连续空格。每题只记录第一次有效检查。</p>${!card.checked ? button('检查拼写','check','','primary-btn') : ''}</form>
+      ${card.checked ? `<div class="ws-answer ws-spelling-result ${card.result.correct ? 'is-correct' : 'needs-work'}" role="status"><strong>${card.result.correct ? '✓ 本次拼写正确' : '再看一遍，留意字母顺序'}</strong><p>你的拼写：<span lang="en">${esc(card.result.input)}</span></p><p>正确写法：<strong lang="en">${esc(word.word)}</strong> · ${esc(word.meaning)}</p><p lang="en">${esc(word.example)}</p>${button('▶ 朗读单词与例句','example-audio','','ws-audio')}<p class="ws-fine-print">拼写结果已单独记录；复习日期由记忆卡自评安排。</p></div><div class="ws-card-footer ws-actions">${button(round.cursor+1 === round.queue.length ? '下一词 · 完成本轮' : '下一词 →','next','','primary-btn')}</div>` : ''}</article>`;
+  }
+  function render() {
+    const current = unit();
+    if (!current || !units.has(current.id)) return;
+    const currentBook = books.get(current.bookId);
+    root.innerHTML = `<header class="ws-heading"><div><span class="cx-kicker">A LITTLE PRACTICE, EVERY DAY</span><h2>背单词</h2><p>先回想，再核对。让每次复习都有迹可循。</p></div><span class="ws-scope">${esc(currentBook.shortLabel || currentBook.title)} · Unit ${current.number}</span></header>
+      <div class="ws-selectors"><label for="wsBook">选择教材<select id="wsBook">${D.books.map(book => `<option value="${esc(book.id)}"${selected(book.id,current.bookId)}>${esc(book.shortLabel || book.title)}</option>`).join('')}</select></label><label class="ws-unit-select" for="wsUnit">选择单元<select id="wsUnit">${D.units.filter(other => other.bookId === current.bookId).map(other => `<option value="${esc(other.id)}"${selected(other.id,current.id)}>Unit ${other.number} · ${esc(other.title)}</option>`).join('')}</select></label></div>
+      <div class="ws-unit-copy"><h3>Unit ${current.number} · ${esc(current.title)}</h3><p>本单元精选 ${current.vocabulary.length} 词，来自站内同步课程；并非教材完整词表。</p></div>${renderStats(current)}
+      <div class="ws-toolbar"><div class="ws-segments ws-modes" aria-label="选择背词方式">${[['cards','记忆卡'],['spelling','中文提示拼写']].map(([value,label]) => `<button type="button" data-ws-action="mode" data-value="${value}" aria-pressed="${mode === value}">${label}</button>`).join('')}</div><div class="ws-segments ws-filters" aria-label="筛选单词">${[['all','全部词'],['new','生词 / 待加强'],['due','到期复习']].map(([value,label]) => `<button type="button" data-ws-action="filter" data-value="${value}" aria-pressed="${filter === value}">${label}</button>`).join('')}</div></div>
+      ${saveFailed ? '<p class="ws-warning" role="alert">背词记录暂未保存到浏览器，已保留在当前页面内存中。请保留此页，使用整站“备份记录”导出后再关闭。</p>' : ''}${notice ? `<p class="ws-notice" role="status">${esc(notice)}</p>` : ''}<div id="wsCardArea">${renderCard(current)}</div>
+      <details class="ws-plan"><summary>复习计划与记录说明</summary><p>复习日期按北京时间计算。初次接触的词和“再学一次”的词当天待复习；初次记住后安排在 1 天后复习，到期后记住再进阶，依次安排在 3、7、14 天后复习，之后保持 14 天间隔。未到期的再次“记住”只增加练习次数，保留原复习日期。“再学一次”会重新从当天开始。</p><p>“生词 / 待加强”包括尚未记过、只练过拼写，或最近自评需要再学的词。拼写检查单独计数，不会自动提升记忆级别。</p><p>朗读使用当前设备的英语语音。设备没有可用语音时，可揭晓后对照英文和例句自行朗读。学习记录保存在当前浏览器，清除浏览器数据前请先备份。</p></details>`;
+  }
+  function refresh() { preserveInput(); syncUnit(); render(); }
+  function next() {
+    if (!round.card || (mode === 'cards' ? !round.card.rated : !round.card.checked)) return;
+    round.cursor++;
+    round.card = round.cursor < round.queue.length ? C.createCard(round.unitId,round.queue[round.cursor]) : null;
+    notice = ''; render();
+    $('wsWordTitle')?.focus({preventScroll:true});
+  }
+  function check() {
+    if (syncUnit()) { render(); return; }
+    if (mode !== 'spelling' || !round.card || round.card.checked) return;
+    const input = $('wsSpellingInput')?.value || '';
+    const result = C.checkSpelling(state,round.card,input,unit().vocabulary[round.card.index].word);
+    if (!result) { notice = '先写出你的拼写，再检查答案。'; render(); $('wsSpellingInput')?.focus(); return; }
+    notice = ''; saveReview(round.card); render();
+  }
+  function audio(example) {
+    if (!round.card) return;
+    const word = unit().vocabulary[round.card.index];
+    if (example && !(mode === 'cards' ? round.card.revealed : round.card.checked)) return;
+    if (typeof selectedVoice === 'function' && !selectedVoice()) {
+      notice = '当前设备没有可用英语语音。请核对答案后，对照英文与例句自行朗读。';
+    } else if (typeof speakText === 'function') {
+      speakText(word.word + (example ? '. ' + word.example : ''));
+      notice = '已请求设备英语朗读；如未听到声音，可对照答案文本自行朗读。';
+    } else notice = '当前设备无法朗读。请核对答案后，对照英文与例句自行朗读。';
+    preserveInput(); render();
+  }
+  root.addEventListener('click', event => {
+    const target = event.target.closest('[data-ws-action]');
+    if (!target || !root.contains(target)) return;
+    const action = target.dataset.wsAction, value = target.dataset.value;
+    if (syncUnit()) { render(); return; }
+    if (action === 'mode' && ['cards','spelling'].includes(value)) { if (mode !== value) {mode = value; startRound(); notice = ''; } render(); return; }
+    if (action === 'filter' && ['all','new','due'].includes(value)) { filter = value; startRound(); notice = ''; render(); return; }
+    if (action === 'restart') { startRound(); notice = ''; render(); return; }
+    if (action === 'next') { next(); return; }
+    if (action === 'check') { check(); return; }
+    if (action === 'audio' || action === 'example-audio') { audio(action === 'example-audio'); return; }
+    if (mode !== 'cards' || !round.card) return;
+    if (action === 'reveal') { C.reveal(round.card); render(); }
+    if (['remembered','hard'].includes(action) && C.evaluate(state,round.card,action)) { saveReview(round.card); notice = ''; render(); }
+  });
+  root.addEventListener('change', event => {
+    const target = event.target;
+    if (target.id === 'wsBook') {
+      const nextUnit = D.units.find(other => other.bookId === target.value);
+      if (nextUnit) curriculum.selectUnit(nextUnit.id);
+      refresh();
+    }
+    if (target.id === 'wsUnit' && units.has(target.value)) { curriculum.selectUnit(target.value); refresh(); }
+  });
+  root.addEventListener('input', event => {
+    if (event.target.id === 'wsSpellingInput' && round?.card && !round.card.checked && round.unitId === unit().id) round.card.input = event.target.value;
+  });
+  root.addEventListener('submit', event => {
+    if (event.target.id !== 'wsSpellingForm') return;
+    event.preventDefault(); check();
+  });
+  window.addEventListener('storage', event => {
+    if (window.restoringSnapshot || saving) return;
+    if (event.key === 'englishCurriculumStateV30') { refresh(); return; }
+    if (event.key !== storageKey) return;
+    try {
+      const nextState = latestStored(event.newValue);
+      if (!nextState) throw Error('Invalid word-study storage');
+      state = mergeDirty(nextState);
+      notice = dirtyKeys.size ? '其他页面的记录已更新；本页尚未保存的背词记录仍保留，请及时备份。' : '已同步其他页面的背词记录。';
+      refresh();
+    } catch { notice = '其他页面传来的背词记录不完整，已保留本页记录。'; render(); }
+  });
+  const previousOpenView = window.openView;
+  if (typeof previousOpenView === 'function') window.openView = function (...args) {
+    const result = previousOpenView.apply(this,args);
+    if (args[0] === 'words') refresh();
+    return result;
+  };
+  window.addEventListener('focus', () => { if ($('words')?.classList.contains('active')) refresh(); });
+  window.WordStudy = {snapshot:() => C.normalize(state),refresh};
+  syncUnit(); render();
+})();
+
+</script>
+<script data-bundled-src="review-app.js">
+(function () {
+  'use strict';
+  const C = window.WordMemoryCore, D = window.ENGLISH_CURRICULUM, curriculum = window.Curriculum;
+  const root = document.getElementById('wordMemoryRoot');
+  if (!root || !C || !D || !curriculum) return;
+  const KEY = 'englishWordMemoryV40', NEW_LIMIT = 5, ROUND_LIMIT = 20;
+  const $ = id => document.getElementById(id), esc = window.escapeHtml;
+  const catalog = C.catalog(D), books = new Map(D.books.map(b => [b.id,b]));
+  let state, notice = '', failed = false, blockedRaw = '', busy = false;
+  let panel = 'review', mode = 'meaning', scope = 'all', round = null, shownUnit = '';
+  let custom = {word:'',meaning:'',example:'',unitId:''}, importText = '', importPreview = null;
+  const now = () => new Date();
+  const unit = () => curriculum.unit();
+  const uid = () => 'review-' + (window.crypto?.randomUUID?.() || Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+  const button = (label,action,value='',css='outline-btn',disabled=false) => `<button type="button" class="${css}" data-wm-action="${action}" data-wm-value="${esc(value)}"${disabled?' disabled':''}>${label}</button>`;
+  const selected = (a,b) => a === b ? ' selected' : '';
+  const date = value => new Date(value).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Shanghai'});
+  const currentScope = () => scope === 'unit' ? unit().id : null;
+
+  const raw = safeStore.get(KEY,null);
+  try { state = C.normalize(raw ? JSON.parse(raw) : null); }
+  catch { state=C.createState();blockedRaw=raw||'';failed=true;notice='原有词汇积累记录暂时无法读取。先导出异常原记录；本页可以练习，新的记录暂保留在内存中。'; }
+
+  function stored() {
+    const value=safeStore.get(KEY,null);
+    if (!value) return C.createState();
+    return C.normalize(JSON.parse(value));
+  }
+  async function coordinateWrite(operation) {
+    let started=false;
+    const run=()=>{started=true;return operation();};
+    try {
+      const locks=window.navigator?.locks;
+      if(typeof locks?.request==='function') return await locks.request(KEY+':write',{mode:'exclusive'},run);
+      return run();
+    } catch(error) {
+      // Some file origins expose the API but reject access. Only fall back if
+      // the callback never ran; retrying an accepted operation could duplicate it.
+      if(started)throw error;
+      return run();
+    }
+  }
+  function persist() {
+    if (window.restoringSnapshot || blockedRaw) { failed=true;return false; }
+    try {
+      state=C.merge(state,stored());
+      const ok=safeStore.set(KEY,JSON.stringify(state));
+      failed=!ok;
+      return ok;
+    } catch (error) {
+      failed=true;notice='记录尚未写入浏览器：'+error.message+'。请先备份，保留此页面。';return false;
+    }
+  }
+  function save() { return coordinateWrite(persist); }
+  function newAllowanceReached(id,kind,time=now()) {
+    if(state.cards[id].schedulers[kind].reps>0)return false;
+    // Match Core.queue's Beijing calendar and first actual review per mode.
+    // Queue membership alone is insufficient: due cards can fill a round.
+    const day=value=>new Date(new Date(value).getTime()+8*60*60*1000).toISOString().slice(0,10);
+    const today=day(time),seen=new Set();let used=0;
+    for(const log of state.logs) {
+      if(log.mode!==kind||seen.has(log.cardId))continue;
+      seen.add(log.cardId);
+      if(day(log.at)===today&&++used>=NEW_LIMIT)return true;
+    }
+    return false;
+  }
+  function syncPractice() {
+    const p=round?.practice;if(!p)return;
+    p.blocked=!p.rated&&newAllowanceReached(p.id,round.mode);
+    if(p.rated)p.due=state.cards[p.id].schedulers[round.mode].due;
+  }
+  function updateSummary() {
+    const meaning=C.stats(state,now(),'meaning'), spelling=C.stats(state,now(),'spelling');
+    const home=$('memoryHomeDue'), today=$('memoryTodayDue'), growth=$('memoryGrowthSummary');
+    if (home) home.textContent=`我的词库 ${meaning.total} 词 · 词义到期 ${meaning.due} 词 · 拼写到期 ${spelling.due} 词。先复习到期词，再少量学新词。`;
+    if (today) today.textContent=`词义到期 ${meaning.due} 词 · 拼写到期 ${spelling.due} 词`;
+    if (growth) growth.textContent=`已纳入词库 ${meaning.total} 词；词义练过 ${meaning.reviewedWords} 词，拼写练过 ${spelling.reviewedWords} 词。今天词义 ${meaning.reviewedToday} 次、拼写 ${spelling.reviewedToday} 次，记录可导出核对。`;
+  }
+  function startRound() {
+    const ids=C.queue(state,{unitId:currentScope(),now:now(),mode,limit:ROUND_LIMIT,newLimit:NEW_LIMIT});
+    round={ids,index:0,mode,unitId:currentScope(),practice:null};
+    nextCard();
+  }
+  function nextCard() {
+    const id=round?.ids[round.index];
+    round.practice=id&&state.cards[id]?{id,eventId:uid(),input:'',revealed:false,correct:null,rated:false,due:null}:null;
+  }
+  function readyRound() {
+    if (!round || round.mode!==mode || round.unitId!==currentScope()) startRound();
+    syncPractice();
+  }
+  function syncUnit() {
+    const id=unit().id;
+    if (shownUnit!==id) { shownUnit=id;if(scope==='unit')round=null; }
+  }
+  function warning() {
+    return `${failed?`<div class="wm-warning" role="alert"><strong>这些新记录尚未保存到浏览器。</strong><p>请保留此页面，先点顶部“备份记录”导出。不要先关闭或刷新页面。</p>${blockedRaw?button('导出异常原记录','recovery') : button('重试保存','save')}</div>`:''}${notice?`<p class="wm-notice" role="status">${esc(notice)}</p>`:''}`;
+  }
+  function statsHtml() {
+    const s=C.stats(state,now(),mode);
+    return `<div class="wm-stats" aria-label="当前练习方式的词汇记录"><article><span>我的词库</span><strong>${s.total}<small> 词条</small></strong></article><article><span>${mode==='meaning'?'词义':'拼写'}已到期</span><strong>${s.due}<small> 词</small></strong></article><article><span>今天已练</span><strong>${s.reviewedToday}<small> 次</small></strong></article><article><span>本方式尚未练</span><strong>${s.new}<small> 词</small></strong></article></div>`;
+  }
+  function reviewHtml() {
+    readyRound();
+    const p=round.practice;
+    const controls=`<div class="wm-controls"><div class="wm-segments" aria-label="复习方式">${[['meaning','回想词义'],['spelling','中文提示拼写']].map(([v,l])=>`<button type="button" data-wm-action="mode" data-wm-value="${v}" aria-pressed="${mode===v}">${l}</button>`).join('')}</div><label>复习范围<select id="wmScope"><option value="all"${selected(scope,'all')}>所有已加入的单元与生词</option><option value="unit"${selected(scope,'unit')}>只看当前单元</option></select></label></div>`;
+    if (!p) {
+      const hasCards=Object.keys(state.cards).length>0;
+      return controls+`<section class="wm-empty"><span class="wm-empty-icon" aria-hidden="true">🌱</span><h3>${round.ids.length?'这一轮练完了':'现在没有需要立即练习的词'}</h3><p>${hasCards?'已到期的旧词优先；每种方式每天最多新学 5 个词。短期复习到时后，可以再检查队列。':'从当前单元加入几个词，或把课本和阅读里遇到的生词加进来。'}</p><div class="wm-actions">${button(hasCards?'重新检查到期词':'加入本单元精选词',''+(hasCards?'restart':'enroll-unit'),'','primary-btn')}${button('看看本单元词库','panel','library')}${button('去学以致用','literacy')}</div><p class="wm-muted">完整精选词库为 ${catalog.length} 条单元词条，不是教材或课标完整词表；也不把练习次数当成掌握词数。</p></section>`;
+    }
+    const w=state.cards[p.id];
+    const answer= p.revealed ? `<section class="wm-answer" aria-label="答案与语境"><strong>${esc(w.meaning)}</strong><p lang="en">${esc(w.example||'为这个词补充自己的生活例句，会更容易记住它。')}</p><div class="wm-actions">${button('朗读单词','audio','word','wm-link')}${w.example?button('朗读例句','audio','example','wm-link'):''}${w.unitId?button('读本单元短文','read',w.unitId,'wm-link'):''}</div></section>` : '<div class="wm-concealed">词义和例句暂时收起。给自己几秒，先独立回想。</div>';
+    let task;
+    if(mode==='meaning') {
+      task=`<p class="wm-task-hint">看英文，回想它在句子中的意思</p><h3 id="wmCardTitle" tabindex="-1" lang="en">${esc(w.word)}</h3><label for="wmRecallInput">我的回忆 <span>可写中文关键词，也可先口头说出</span></label><input id="wmRecallInput" type="text" maxlength="300" value="${esc(p.input)}" placeholder="先回想，再查看答案"${p.revealed?' readonly':''}>${answer}${!p.revealed?button('我已回想，查看答案','reveal','','primary-btn'):''}`;
+    } else {
+      task=`<p class="wm-task-hint">根据中文，独立写出英语单词或短语</p><h3 id="wmCardTitle" tabindex="-1">${esc(w.meaning)}</h3><form id="wmSpellingForm"><label for="wmSpellingInput">我的第一次拼写</label><input id="wmSpellingInput" type="text" maxlength="160" lang="en" autocomplete="off" autocapitalize="none" spellcheck="false" value="${esc(p.input)}" placeholder="写完后再检查"${p.revealed?' readonly':''}>${!p.revealed?'<button type="submit" class="primary-btn">检查拼写</button>':''}</form>${p.revealed?`<div class="wm-spelling-result ${p.correct?'is-correct':'needs-work'}" role="status"><strong>${p.correct?'本次第一次拼写正确':'这一次还没写对，先看清正确写法'}</strong><p>正确写法：<b lang="en">${esc(w.word)}</b></p><p>你的输入：<span lang="en">${esc(p.input)}</span></p><small>只记录第一次检查。看答案后的订正不覆盖这次结果。</small></div>`:''}${answer}`;
+    }
+    const blocked=p.blocked?`<p class="wm-notice" role="status">今天本方式的新词额度已用完，当前输入已保留。明天可以继续新词，也可以先检查已到期的词。</p>${button('检查已到期词','restart')}`:'';
+    const feedback = p.rated ? `<div id="wmReviewResult" class="wm-recorded" role="status"><strong>${failed?'本次结果保留在页面内存中':'本次结果已保存'}</strong><span>本方式下次复习：${date(p.due)}（北京时间）</span></div>${button(round.index+1===round.ids.length?'完成本轮':'下一词 →','next','','primary-btn')}` : p.revealed ? (mode==='meaning'?`<p class="wm-rating-note">按看答案前的第一次回忆选择。猜中、看过后才想起，请选“还没想起”。这是自评记录。</p><div class="wm-actions wm-rating">${button('还没想起 · 再学','rate','1','outline-btn',busy||p.blocked)}${button('自己想起了','rate','3','primary-btn',busy||p.blocked)}</div>`:`${button('记录第一次结果并安排复习','rate',p.correct?'3':'1','primary-btn',busy||p.blocked)}`) : '';
+    return controls+`<article class="wm-practice"><div class="wm-practice-top"><span>${mode==='meaning'?'RECALL THE MEANING':'SPELL FROM MEMORY'}</span><span>本轮 ${round.index+1} / ${round.ids.length}</span></div>${task}<div class="wm-practice-footer">${blocked}${feedback}</div></article><p class="wm-muted">词义和拼写有各自的复习日期。计划随真实反馈调整；它不代表听说读写已经全部掌握。</p>`;
+  }
+  function libraryHtml() {
+    const u=unit(), list=catalog.filter(w=>w.unitId===u.id);
+    return `<section class="wm-library"><div class="wm-section-heading"><div><h3>Unit ${u.number} · ${esc(u.title)}</h3><p>精选 ${list.length} 个主题词，放在例句里理解，再加入长期复习。</p></div>${button('加入本单元全部精选词','enroll-unit','','primary-btn')}</div><div class="wm-word-grid">${list.map(w=>`<article class="wm-word"><div><h4 lang="en">${esc(w.word)}</h4><span>${esc(w.meaning)}</span></div><p lang="en">${esc(w.example)}</p>${button(state.cards[w.id]?'已在我的词库':'加入复习','enroll',w.id,state.cards[w.id]?'wm-added':'outline-btn',!!state.cards[w.id])}</article>`).join('')}</div><div class="wm-context-link"><p>先读本单元语篇，再用两三个词完成自己的表达。</p><div class="wm-actions">${button('读本单元短文','read',u.id)}${button('完成主题任务','literacy','','primary-btn')}</div></div></section>`;
+  }
+  function customHtml() {
+    const own=Object.values(state.cards).filter(w=>w.origin==='custom');
+    return `<section class="wm-custom"><div class="wm-section-heading"><div><h3>把课本和生活里的生词留下来</h3><p>只填真实词义，尽量加上你看到的原句。加入后按词义、拼写分别复习。</p></div></div><form id="wmCustomForm" class="wm-custom-form"><label for="wmCustomWord">英语单词或短语<input id="wmCustomWord" required maxlength="160" autocomplete="off" autocapitalize="none" spellcheck="false" lang="en" value="${esc(custom.word)}" placeholder="例如：take part in"></label><label for="wmCustomMeaning">在这里的中文意思<input id="wmCustomMeaning" required maxlength="300" value="${esc(custom.meaning)}" placeholder="例如：参加"></label><label class="wm-wide" for="wmCustomExample">例句 <span>可暂时留空</span><input id="wmCustomExample" maxlength="1000" lang="en" value="${esc(custom.example)}" placeholder="写下课本、阅读或自己生活中的句子"></label><label for="wmCustomUnit">归属单元<select id="wmCustomUnit"><option value=""${selected(custom.unitId,'')}>课外积累，不绑定单元</option>${D.units.map(u=>`<option value="${u.id}"${selected(custom.unitId,u.id)}>${esc(books.get(u.bookId).shortLabel||books.get(u.bookId).title)} · ${u.number} ${esc(u.title)}</option>`).join('')}</select></label><div class="wm-custom-submit"><button type="submit" class="primary-btn">加入我的生词本</button></div></form><details class="wm-import"><summary>从表格批量加入生词</summary><p>从表格复制三列：英文、中文、例句；列之间用 Tab 分隔，每行一个词，最多 200 行。也可下载模板填写。先预览，确认后才加入。</p>${button('下载三列模板','template','','wm-link')}<label for="wmImportText">粘贴词表<textarea id="wmImportText" rows="5" maxlength="250000" placeholder="英文　[Tab]　中文　[Tab]　例句">${esc(importText)}</textarea></label>${button('检查并预览','preview-import')}${importPreview?`<div class="wm-import-preview"><strong>将检查加入 ${importPreview.length} 行</strong><ul>${importPreview.slice(0,5).map(w=>`<li><b lang="en">${esc(w.word)}</b> — ${esc(w.meaning)}</li>`).join('')}</ul><p>同词同义的重复条目会沿用已有记录；整批检查通过后才提交。</p>${button('确认加入这些词','commit-import','','primary-btn')}</div>`:''}</details><div class="wm-section-heading"><h3>已加入的自建词 <small>${own.length} 条</small></h3>${button('导出我的词表','export-words','','wm-link',!Object.keys(state.cards).length)}</div><div class="wm-own-list">${own.length?own.slice(-40).reverse().map(w=>`<article><strong lang="en">${esc(w.word)}</strong><span>${esc(w.meaning)}</span><p lang="en">${esc(w.example||'尚未添加例句')}</p></article>`).join(''):'<p class="wm-muted">这里还没有自建词。上方加入后会保存在本机词库中。</p>'}</div></section>`;
+  }
+  function historyHtml() {
+    const logs=state.logs.slice(-20).reverse();
+    return `<section class="wm-history"><div class="wm-section-heading"><div><h3>每一次练习，都有具体记录</h3><p>最近 20 次；完整复习日志与算法版本包含在整站备份中。</p></div>${button('导出我的词表','export-words','','outline-btn')}</div>${logs.length?`<ol>${logs.map(log=>`<li><div><strong lang="en">${esc(state.cards[log.cardId]?.word||'词条')}</strong><span>${log.mode==='meaning'?'词义自评':'第一次拼写'} · ${log.rating===1?'需要再学':'本次回忆成功'}</span></div><time>${date(log.at)}</time></li>`).join('')}</ol>`:'<p class="wm-muted">还没有实际提交的复习记录。加入词库不算已经学会，第一次回忆后记录才会出现在这里。</p>'}</section>`;
+  }
+  function render() {
+    syncUnit();
+    const b=books.get(unit().bookId);
+    root.innerHTML=`<header class="wm-heading"><div><span class="cx-kicker">REMEMBER, REVISIT, USE</span><h2>词汇积累</h2><p>先回忆，再核对；隔几天，还能自己想起来。</p></div><span class="wm-book-label">${esc(b.shortLabel||b.title)} · Unit ${unit().number}</span></header>${statsHtml()}<nav class="wm-tabs" aria-label="词汇积累功能">${[['review','今日复习'],['library','本单元词库'],['custom','我的生词本'],['history','学习记录']].map(([v,l])=>`<button type="button" data-wm-action="panel" data-wm-value="${v}" aria-pressed="${panel===v}">${l}</button>`).join('')}</nav>${warning()}${panel==='review'?reviewHtml():panel==='library'?libraryHtml():panel==='custom'?customHtml():historyHtml()}<details class="wm-about"><summary>复习方法、课标范围与记录说明</summary><p>词义回忆与拼写分别安排，每种方式每天最多新学 ${NEW_LIMIT} 个词，每轮最多 ${ROUND_LIMIT} 个。到期的已学词优先。忘记后需要再学，下一次日期由本机运行的开源 ts-fsrs 5.4.2（FSRS-6）计算；固定目标参数是学习安排，不是个人记忆保证，也不是课标规定的算法。</p><p>课标三级约 1600 词是七至九年级学段累计要求，包含二级 505 词。本站 ${catalog.length} 条单元精选词不是完整课标或教材词表；可把实书中的词补入生词本。目标是围绕主题理解和运用，浏览、加入、复习次数都不等于已掌握词数。</p><p>旧版练习记录保留在下方；新引擎从启用当天起记录真实反馈，不补造过去的复习时间。数据保存在当前浏览器；换设备、网址或离线文件前，请导出整站备份，到新入口恢复。没有账号或云端自动同步。</p><p>开源代码：<a href="https://github.com/open-spaced-repetition/ts-fsrs" target="_blank" rel="noopener noreferrer">ts-fsrs（MIT）</a>；借鉴 <a href="https://github.com/RealKai42/qwerty-learner" target="_blank" rel="noopener noreferrer">Qwerty Learner</a> 的拼写反馈及 <a href="https://luteorg.github.io/lute-manual/" target="_blank" rel="noopener noreferrer">Lute</a> 的语境学习思路，交互由本站实现。</p></details>`;
+    updateSummary();
+  }
+  async function enroll(words) {
+    const next=C.normalize(state), result=C.addWords(next,words,now());
+    state=next;round=null;const ok=await save();
+    notice=`${result.added?`加入 ${result.added} 个词`:'这些词已经在词库里'}${result.existing?`，${result.existing} 个沿用原记录`:''}。${ok?'加入词库还不算完成回忆，请从今日复习开始。':'请先导出备份，暂不要关闭页面。'}`;
+    render();
+  }
+  function reveal() {
+    const p=round?.practice;if(!p||p.revealed)return;
+    p.input=($('wmRecallInput')?.value||p.input).trim();p.revealed=true;notice='';render();
+  }
+  function check() {
+    const p=round?.practice;if(!p||p.revealed||mode!=='spelling')return;
+    p.input=($('wmSpellingInput')?.value||p.input).trim();
+    if(!p.input){notice='先写下你的第一次拼写，再检查。';render();$('wmSpellingInput')?.focus();return;}
+    p.correct=C.checkSpelling(p.input,state.cards[p.id].word);p.revealed=true;notice='';render();
+  }
+  async function rate(rating) {
+    const p=round?.practice;if(!p||!p.revealed||p.rated||busy)return;
+    const reviewMode=mode;
+    busy=true;render();
+    try {
+      await coordinateWrite(()=>{
+        if(!blockedRaw)state=C.merge(state,stored());
+        const time=now();
+        if(newAllowanceReached(p.id,reviewMode,time)){p.blocked=true;return;}
+        const actual=reviewMode==='spelling'?(p.correct?3:1):rating;
+        const result=C.review(state,p.id,actual,time,{eventId:p.eventId,mode:reviewMode,answer:p.input,...(reviewMode==='spelling'?{correct:p.correct}:{})});
+        p.rated=true;notice='';
+        const ok=persist(),w=state.cards[p.id];
+        p.due=w.schedulers[reviewMode].due;
+        if(result.applied&&ok&&w.unitId)curriculum.markWordReviewed(w.word,w.unitId);
+      });
+    }catch(error){notice=error.message;}
+    busy=false;render();
+  }
+  async function addCustom() {
+    const next=C.normalize(state);
+    try {
+      const before=Object.keys(next.cards).length;
+      C.addCustom(next,{...custom,unitId:custom.unitId||null},now());state=next;const ok=await save();round=null;
+      notice=Object.keys(state.cards).length>before?'生词已加入复习计划。':'相同词义的词已存在，沿用原来的复习记录。';
+      if(!ok)notice+=' 当前未写入浏览器，请先备份。';
+      custom={word:'',meaning:'',example:'',unitId:custom.unitId};render();
+    }catch(error){notice=error.message;render();}
+  }
+  async function commitImport() {
+    if(!importPreview)return;
+    try {
+      const next=C.normalize(state), before=Object.keys(next.cards).length, time=now();
+      for(const word of importPreview)C.addCustom(next,{...word,unitId:null},time);
+      state=next;const ok=await save();round=null;notice=`这批词表新增 ${Object.keys(state.cards).length-before} 词，其余同词同义条目沿用原记录。${ok?'':'请先备份，当前未写入浏览器。'}`;
+      importPreview=null;importText='';render();
+    }catch(error){notice='整批未加入：'+error.message;render();}
+  }
+  function speak(example) {
+    const p=round?.practice;if(!p||!p.revealed)return;
+    const w=state.cards[p.id], text=example==='example'?w.example:w.word;
+    if(!text)return;
+    if(typeof selectedVoice==='function'&&!selectedVoice()){notice='本机没有可用的英语语音，可以对照文字朗读；也可到“发音校准”检查本机语音。';render();return;}
+    if(typeof speakText==='function')speakText(text,'word-memory-'+p.id,example==='example'?'例句':'单词');
+  }
+  function exportWords() {
+    const cell=x=>{let s=String(x||'').replace(/[\t\r\n]+/g,' ');return /^[=+@-]/.test(s)?"'"+s:s;};
+    const rows=[['英文','中文','例句','来源'],...Object.values(state.cards).map(w=>[w.word,w.meaning,w.example,w.unitId||'自建词'])];
+    downloadText('我的英语词表.tsv','\ufeff'+rows.map(row=>row.map(cell).join('\t')).join('\n'),'text/tab-separated-values;charset=utf-8');
+    notice='词表已生成；它只含词汇内容。要迁移复习日期与作品，请使用顶部“备份记录”。';render();
+  }
+  function refresh(){if(busy)return;syncUnit();render();}
+  document.addEventListener('input',event=>{
+    const id=event.target.id;
+    if(['wmRecallInput','wmSpellingInput'].includes(id)&&round?.practice&&!round.practice.revealed)round.practice.input=event.target.value;
+    const field={wmCustomWord:'word',wmCustomMeaning:'meaning',wmCustomExample:'example'}[id];
+    if(field)custom[field]=event.target.value;
+    if(id==='wmImportText'){importText=event.target.value;importPreview=null;const box=root.querySelector('.wm-import-preview');if(box)box.remove();}
+  });
+  document.addEventListener('change',event=>{
+    if(event.target.id==='wmScope'){scope=event.target.value;round=null;notice='';render();}
+    if(event.target.id==='wmCustomUnit')custom.unitId=event.target.value;
+  });
+  document.addEventListener('submit',async event=>{
+    if(event.target.id==='wmSpellingForm'){event.preventDefault();check();}
+    if(event.target.id==='wmCustomForm'){event.preventDefault();await addCustom();}
+  });
+  document.addEventListener('click',async event=>{
+    const target=event.target.closest('[data-wm-action]');if(!target||target.disabled)return;
+    const action=target.dataset.wmAction,value=target.dataset.wmValue;
+    if(action==='panel'){panel=value;notice='';render();}
+    else if(action==='mode'){mode=value;round=null;notice='';render();}
+    else if(action==='restart'){round=null;notice='';render();}
+    else if(action==='reveal')reveal();
+    else if(action==='rate')await rate(Number(value));
+    else if(action==='next'&&round?.practice?.rated){round.index++;nextCard();notice='';render();$('wmCardTitle')?.focus({preventScroll:true});}
+    else if(action==='enroll-unit')await enroll(catalog.filter(w=>w.unitId===unit().id));
+    else if(action==='enroll'){const word=catalog.find(w=>w.id===value);if(word)await enroll([word]);}
+    else if(action==='save'){const ok=await save();notice=ok?'当前词汇积累记录已写入浏览器。':'仍未写入，请保留页面并先备份。';render();}
+    else if(action==='recovery')downloadText('词汇积累_异常原记录.json',blockedRaw,'application/json;charset=utf-8');
+    else if(action==='audio')speak(value);
+    else if(action==='literacy')window.openView('literacy');
+    else if(action==='read'){curriculum.selectUnit(value);if(unit().id===value)curriculum.openActivity({kind:'reading'});}
+    else if(action==='preview-import'){try{importPreview=C.parseImport(importText);notice='词表格式已检查，请核对后确认加入。';}catch(error){importPreview=null;notice=error.message;}render();root.querySelector('.wm-import').open=true;}
+    else if(action==='commit-import')await commitImport();
+    else if(action==='template')downloadText('生词导入模板.tsv','\ufeffriver\t河流\tThere is a river near our school.\ntake part in\t参加\tI take part in the reading club.\n','text/tab-separated-values;charset=utf-8');
+    else if(action==='export-words')exportWords();
+  });
+  document.addEventListener('curriculum:updated',refresh);
+  window.addEventListener('storage',async event=>{
+    if(event.key!==KEY||window.restoringSnapshot||blockedRaw)return;
+    try {
+      // newValue can contain a write that a later tab has already overwritten.
+      // Preserve it before reading latest storage, including while a lock waits.
+      state=C.merge(state,C.normalize(event.newValue?JSON.parse(event.newValue):null));
+      const latest=stored();state=C.merge(state,latest);
+      render();
+      if(JSON.stringify(state)!==JSON.stringify(latest)){await save();render();}
+    } catch(error){notice='其他页面的词汇记录未能合并：'+error.message;failed=true;render();}
+  });
+  const previousOpenView=window.openView;
+  window.openView=function(...args){const result=previousOpenView.apply(this,args);if(args[0]==='words')refresh();return result;};
+  window.addEventListener('focus',()=>{if($('words')?.classList.contains('active'))refresh();});
+  window.WordMemory={snapshot:()=>C.normalize(state),refresh,open:()=>window.openView('words')};
+  if(!blockedRaw&&!state.migratedLegacy){try{C.migrateLegacy(state,window.WordStudy?.snapshot(),D,now());save().then(refresh);}catch(error){notice='旧记录已保留；词汇计划可以从本单元重新加入。'+error.message;}}
+  render();
+})();
+
+</script>
+<script data-bundled-src="literacy-data.js">
+// Generated by scripts/build-literacy.py; edit content/literacy-tasks.json.
+window.ENGLISH_LITERACY = {"schemaVersion":1,"updatedAt":"2026-10-29","scopeNote":"围绕站内44个单元主题与原创短文设计的拓展任务，不是教材原文。词数为学习建议；自查和作品记录不自动评定核心素养等级。","tasks":[{"unitId":"7a-u1","title":"给新同学一张有温度的地图","audience":"第一次到校、说话不多的新同学","task":"为新同学写一张欢迎卡：介绍你、指出一个想带他去的地方，并说明怎样一起找到它。","readingPrompt":"Ben 到结尾仍然安静，为什么却不再孤单？引用 Jo 或 Ben 的一个行动，说明这个行动怎样支持你的推断。","culturePrompt":"比较直接上前聊天与递上一张地图这两种欢迎方式。对不同新同学各有什么帮助？不要把安静当成不友好。","transferPrompt":"新同学还读不懂地图上的英文。你会给欢迎卡增加什么，并保留哪一项信息？说明原因。","reflectionPrompt":"先写条件变化后的调整，再反思：你怎样让介绍更容易被第一次见面的人理解？下次想练哪一句？","targetWords":["introduce","friendly"],"evidenceAnchor":"Ben adds pictures of doors and stairs.","wordRange":{"min":40,"max":60},"starters":["I am ... and I can show you ...","This place is ... because ..."],"rubric":[{"id":"evidence","label":"我引用了Ben 和 Jo 互相帮助的具体信息，并说明它怎样支持判断。"},{"id":"expression","label":"我的“给新同学一张有温度的地图”回应了受众需要，句子意思清楚。"},{"id":"comparison","label":"我比较了具体做法和理由，尊重不同需要，没有给整个群体贴标签。"},{"id":"reflection","label":"我回应了变化后的条件，说明调整理由，并写下一项可执行的学习改进。"}],"readingId":"7a-u1-reading","readingTitle":"One Small Map"},{"unitId":"7a-u2","title":"把窗外的小发现分享出去","audience":"暂时不方便外出的家人","task":"为家人设计一张照片留言卡：描述窗外一个普通细节，告诉对方你为什么选它，并邀请对方提出下次拍摄主题。","readingPrompt":"Nina 没换昂贵相机，为什么仍然更喜欢这个爱好？找出她练习或与 Grandma 交流的细节，解释你的判断。","culturePrompt":"比较自己欣赏照片与把照片讲给家人听的乐趣。可以用你或材料中的经验，不认为每个人都需要同一种爱好。","transferPrompt":"家人更喜欢听声音而不是看照片。你会怎样改成一段声音留言，同时保留这次分享的目的？","reflectionPrompt":"写出新的分享方式及理由，再说说：描述普通事物时，你用了哪种观察方法？下周准备观察什么？","targetWords":["notice","share"],"evidenceAnchor":"Her favourite part is sharing an ordinary moment with someone she loves.","wordRange":{"min":40,"max":60},"starters":["I noticed ... outside the window.","I chose it because ..."],"rubric":[{"id":"evidence","label":"我引用了Nina 的练习与分享的具体信息，并说明它怎样支持判断。"},{"id":"expression","label":"我的“把窗外的小发现分享出去”回应了受众需要，句子意思清楚。"},{"id":"comparison","label":"我比较了具体做法和理由，尊重不同需要，没有给整个群体贴标签。"},{"id":"reflection","label":"我回应了变化后的条件，说明调整理由，并写下一项可执行的学习改进。"}],"readingId":"7a-u2-reading","readingTitle":"A Window of Small Things"},{"unitId":"7a-u3","title":"为临时关门的场馆改一条路线","audience":"参加校园开放日的访客","task":"写一段校园导览开场：安排两个可参观地点，说明每处能看到什么，并礼貌解释一个暂时不能去的地点。","readingPrompt":"实验室关闭后，花园为什么反而能讲好学校的故事？引用记录本或同学举手的细节，推断学生承担了什么责任。","culturePrompt":"访客可能更关心建筑，也可能想了解学生生活。比较这两种参观兴趣，怎样询问而不替他们决定？","transferPrompt":"开放日开始下雨，花园也不能参观。请把一个户外环节改为室内展示，解释仍能看到什么学习过程。","reflectionPrompt":"写下雨天调整，再反思：你提供的方位和地点信息够清楚吗？怎样向一位同伴核对？","targetWords":["guide","visitor"],"evidenceAnchor":"Three classmates raise their hands.","wordRange":{"min":40,"max":60},"starters":["Welcome to our school. Our first stop is ...","We cannot visit ... today, but we can ..."],"rubric":[{"id":"evidence","label":"我引用了花园记录本与同学举手的具体信息，并说明它怎样支持判断。"},{"id":"expression","label":"我的“为临时关门的场馆改一条路线”回应了受众需要，句子意思清楚。"},{"id":"comparison","label":"我比较了具体做法和理由，尊重不同需要，没有给整个群体贴标签。"},{"id":"reflection","label":"我回应了变化后的条件，说明调整理由，并写下一项可执行的学习改进。"}],"readingId":"7a-u3-reading","readingTitle":"The Best Part of the Tour"},{"unitId":"7a-u4","title":"为匆忙的早晨留出五分钟","audience":"总在早晨找东西的同班同学","task":"给同学写一份晚间准备小便条：安排三件容易做到的事，说明它们怎样帮助第二天早晨。","readingPrompt":"Toby 看起来更从容，是因为起得更早吗？找出支持答案的句子，并解释晚间决定与早晨变化的关系。","culturePrompt":"比较你和 Toby 的作息中一个相同点与不同点。家庭时间不同，不把某个时间表说成人人必须照做。","transferPrompt":"同学有一晚要很晚回家，无法做完三件事。你会保留哪一件、调整哪一件？说出优先理由。","reflectionPrompt":"写出精简安排，再反思：你的计划是增加事情，还是减少第二天的困难？明天准备用什么小记录检查？","targetWords":["prepare","routine"],"evidenceAnchor":"Toby does not get up earlier.","wordRange":{"min":40,"max":60},"starters":["In the evening, you can prepare ...","This routine may help because ..."],"rubric":[{"id":"evidence","label":"我引用了Toby 起床时间与晚间准备的具体信息，并说明它怎样支持判断。"},{"id":"expression","label":"我的“为匆忙的早晨留出五分钟”回应了受众需要，句子意思清楚。"},{"id":"comparison","label":"我比较了具体做法和理由，尊重不同需要，没有给整个群体贴标签。"},{"id":"reflection","label":"我回应了变化后的条件，说明调整理由，并写下一项可执行的学习改进。"}],"readingId":"7a-u4-reading","readingTitle":"Five Minutes in the Evening"},{"unitId":"7a-u5","title":"问出一道菜背后的故事","audience":"准备参加班级午餐交流的同学","task":"写一张食物交流卡：介绍一道你愿意了解的菜，列出想问的食材问题，并邀请同伴分享自己的选择。","readingPrompt":"Leo 的午餐尝试怎样变成家庭活动？引用他与厨师或父亲互动的细节，说明一个问题带来了什么。","culturePrompt":"比较 Leo 和 Ada 的具体选择，或与你熟悉的一餐比较。关注口味与习惯，不评价谁吃得更高级，也不替别人规定食量。","transferPrompt":"同伴不想尝这道菜，但愿意讲它的做法。怎样调整交流任务，让对方也能自在参加？","reflectionPrompt":"写出尊重对方选择的新邀请，再反思：你是否用了准确的数量表达？下次还想学哪种食材的说法？","targetWords":["vegetable","bowl"],"evidenceAnchor":"They decide to make a simi{% endraw %}

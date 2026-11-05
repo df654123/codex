@@ -1,0 +1,1178 @@
+{% raw %}ckEvent==='function') betaTrackEvent('task_change',{task:box.dataset.task,checked:box.checked});
+    });
+  });
+
+  function updateProgress(){
+    const {done,percent}=EnglishCore.progress(saved,safeStore.get('studyMode','standard'));
+    const taskPercentEl=document.getElementById('taskPercent');
+    const heroPercentEl=document.getElementById('heroPercent');
+    if(taskPercentEl) taskPercentEl.textContent=percent+'%';
+    if(heroPercentEl) heroPercentEl.textContent=percent+'%';
+    document.documentElement.style.setProperty('--task-angle',(percent*3.6)+'deg');
+    const msg = document.getElementById('dailyMessage');
+    if(percent===0) msg.textContent='今天只需要完成第一项。开始以后，后面的任务会变得更容易。';
+    else if(percent<60) msg.textContent='已经开始了，保持现在的节奏，不需要追求一次完成全部。';
+    else if(percent<100) msg.textContent='今天的大部分任务已经完成，再完成一点点就能收获完整记录。';
+    else msg.textContent='太棒了！今天的学习闭环已经完成。请给自己一个真诚的肯定。';
+  }
+  updateProgress();
+
+  document.getElementById('finishDay').addEventListener('click',()=>{
+    const success=safeStore.set('englishReflection',document.getElementById('reflection').value);
+    if(!success){showToast('暂未保存，请导出备份后重试。');return;}
+    if(activeLearningSession) requestFinishLearningSession();
+    else {showToast('今日任务与学习感受已保存。'); if(window.LearningApp) LearningApp.render();}
+  });
+  document.getElementById('reflection').value=safeStore.get('englishReflection','');
+  document.getElementById('reflection').addEventListener('input',e=>safeStore.set('englishReflection',e.target.value));
+  function resetDailyTasks(){
+    if(!window.confirm('重新勾选今天的任务？历史学习与答题记录会保留。'))return;
+    const previous=saved;
+    const next={_date:EnglishCore.dayKey(),...(saved._unit?{_unit:saved._unit}:{})};
+    saved=next;
+    if(!safeStore.set('englishGrowthTasks',JSON.stringify(next))){saved=previous;return;}
+    taskBoxes.forEach(b=>{b.checked=false;b.closest('.task').classList.remove('completed');});
+    updateProgress();syncHomeTasks();if(window.LearningApp)LearningApp.captureDay();
+    showToast('今天的任务已重置。');
+  }
+  document.getElementById('resetProgress').addEventListener('click',resetDailyTasks);
+
+  document.querySelectorAll('[data-answer]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('[data-answer]').forEach(x=>x.classList.remove('correct','wrong'));
+      const feedback=document.getElementById('grammarFeedback');
+      if(window.LearningApp)LearningApp.saveDraft('grammar',btn.textContent.trim());
+      if(typeof betaTrackEvent==='function') betaTrackEvent('grammar_answer',{answer:btn.textContent.trim(),correct:btn.dataset.answer==='correct'});
+      if(btn.dataset.answer==='correct'){
+        btn.classList.add('correct');
+        feedback.textContent='正确！主语是 I，所以使用 am。';
+      }else{
+        btn.classList.add('wrong');
+        feedback.textContent='再想一想：I 是特殊主语，固定搭配是 I am。';
+      }
+    });
+  });
+
+  const mainAudio = document.getElementById('mainAudio');
+  const audioBar = document.getElementById('audioBar');
+  const audioTitle = document.getElementById('audioTitle');
+  const audioPlayPause = document.getElementById('audioPlayPause');
+  const audioSeek = document.getElementById('audioSeek');
+  const audioCurrent = document.getElementById('audioCurrent');
+  const audioDuration = document.getElementById('audioDuration');
+  const audioRate = document.getElementById('audioRate');
+  const audioEngine = document.getElementById('audioEngine');
+  const voiceAccent = document.getElementById('voiceAccent');
+  const voiceSelect = document.getElementById('voiceSelect');
+
+  let availableVoices = [];
+  let currentMode = 'none';
+  let currentSequence = [];
+  let currentSequenceIndex = 0;
+  let currentSequenceTitle = '';
+  let currentSpeechRate = 1;
+  let currentUtterance = null;
+  let currentSpeechFallback = null;
+  let sequenceCancelled = false;
+
+  const preferredVoiceNames = {
+    'en-GB': ['Sonia','Libby','Serena','Kate','Martha','Hazel','Daniel','Google UK English Female','Microsoft Sonia','Microsoft Libby'],
+    'en-US': ['Samantha','Ava','Allison','Jenny','Aria','Google US English','Microsoft Jenny','Microsoft Aria']
+  };
+
+  function loadVoices(){
+    if(!('speechSynthesis' in window)) return;
+    availableVoices = window.speechSynthesis.getVoices() || [];
+    populateVoiceMenus();
+  }
+
+  function voiceScore(voice, lang){
+    const name=(voice.name||'').toLowerCase();
+    const locale=(voice.lang||'').toLowerCase();
+    let score=0;
+    if(locale===lang.toLowerCase()) score+=50;
+    else if(locale.startsWith(lang.slice(0,2).toLowerCase())) score+=20;
+    if(voice.localService) score+=18;
+    const preferred=(preferredVoiceNames[lang]||[]).map(x=>x.toLowerCase());
+    preferred.forEach((n,i)=>{ if(name.includes(n)) score+=30-i; });
+    if(/natural|enhanced|premium/.test(name)) score+=12;
+    if(/compact|espeak|festival/.test(name)) score-=30;
+    return score;
+  }
+
+  function voicesForAccent(lang){
+    return availableVoices
+      .filter(v=>v.localService===true && (v.lang||'').toLowerCase().startsWith((lang||'en-GB').slice(0,2).toLowerCase()))
+      .sort((a,b)=>voiceScore(b,lang)-voiceScore(a,lang));
+  }
+
+  function populateSelect(select, lang, desiredURI){
+    const voices=voicesForAccent(lang);
+    select.innerHTML='';
+    if(!voices.length){
+      const opt=document.createElement('option');
+      opt.value='';
+      opt.textContent='未发现本机英语语音包';
+      select.appendChild(opt);
+      return;
+    }
+    voices.forEach((v,index)=>{
+      const opt=document.createElement('option');
+      opt.value=v.voiceURI;
+      const offline=v.localService?'离线':'可能需网络';
+      opt.textContent=`${index===0?'推荐 · ':''}${v.name} · ${v.lang} · ${offline}`;
+      select.appendChild(opt);
+    });
+    if(desiredURI && voices.some(v=>v.voiceURI===desiredURI)) select.value=desiredURI;
+    else select.value=voices[0].voiceURI;
+  }
+
+  function populateVoiceMenus(){
+    const lang=voiceAccent.value||'en-GB';
+    const saved=safeStore.get('selectedVoiceURI','');
+    populateSelect(voiceSelect,lang,saved);
+    const labAccent=document.getElementById('labAccent');
+    const labVoice=document.getElementById('labVoice');
+    if(labAccent && labVoice){
+      labAccent.value=lang;
+      populateSelect(labVoice,lang,voiceSelect.value||saved);
+    }
+  }
+
+  loadVoices();
+  if('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged=loadVoices;
+
+  function selectedVoice(){
+    const uri=voiceSelect.value || safeStore.get('selectedVoiceURI','');
+    const local=voicesForAccent(voiceAccent.value||'en-GB');
+    return local.find(v=>v.voiceURI===uri) || local[0] || null;
+  }
+
+  function formatTime(seconds){
+    if(!Number.isFinite(seconds)) return '00:00';
+    const m=Math.floor(seconds/60).toString().padStart(2,'0');
+    const s=Math.floor(seconds%60).toString().padStart(2,'0');
+    return `${m}:${s}`;
+  }
+
+  function openAudioBar(title){
+    audioTitle.textContent=title||'课程音频';
+    audioBar.classList.add('active');
+    document.body.classList.add('audio-active');
+  }
+
+  function stopEverything(){
+    sequenceCancelled=true;
+    currentSequence=[];
+    currentSequenceIndex=0;
+    mainAudio.pause();
+    if('speechSynthesis' in window) window.speechSynthesis.cancel();
+    currentUtterance=null;
+    currentSpeechFallback=null;
+    audioPlayPause.textContent='▶';
+  }
+
+  function speechTextFallback(segments,title,onTextFallback){
+    stopEverything();
+    if(typeof onTextFallback==='function' && onTextFallback()===false) return false;
+    if(typeof window.showLearningTextFallback==='function') window.showLearningTextFallback(title||'朗读文本',segments.join(' '));
+    else showToast('本机英语朗读不可用，请查看当前页面的文本继续练习。');
+    return false;
+  }
+
+  function speakNextSegment(){
+    if(sequenceCancelled || currentSequenceIndex>=currentSequence.length){
+      audioPlayPause.textContent='▶';
+      audioSeek.value=100;
+      return;
+    }
+    const text=currentSequence[currentSequenceIndex];
+    const voice=selectedVoice();
+    if(!voice) return speechTextFallback(currentSequence.slice(currentSequenceIndex),currentSequenceTitle,currentSpeechFallback);
+    let utter;
+    try {utter=new SpeechSynthesisUtterance(text);}
+    catch (_) {return speechTextFallback(currentSequence.slice(currentSequenceIndex),currentSequenceTitle,currentSpeechFallback);}
+    utter.lang=voiceAccent.value;
+    utter.rate=currentSpeechRate;
+    utter.pitch=1;
+    utter.volume=1;
+    utter.voice=voice;
+    currentUtterance=utter;
+
+    utter.onstart=()=>{
+      if(sequenceCancelled || currentUtterance!==utter) return;
+      audioPlayPause.textContent='❚❚';
+      audioCurrent.textContent=`${currentSequenceIndex+1}/${currentSequence.length}`;
+      audioSeek.value=Math.round(currentSequenceIndex/currentSequence.length*100);
+    };
+    utter.onend=()=>{
+      if(sequenceCancelled || currentUtterance!==utter) return;
+      currentSequenceIndex++;
+      window.setTimeout(()=>{if(!sequenceCancelled && currentUtterance===utter) speakNextSegment();},180);
+    };
+    utter.onerror=()=>{
+      if(sequenceCancelled || currentUtterance!==utter) return;
+      speechTextFallback(currentSequence.slice(currentSequenceIndex),currentSequenceTitle,currentSpeechFallback);
+    };
+    try {window.speechSynthesis.speak(utter);}
+    catch (_) {return speechTextFallback(currentSequence.slice(currentSequenceIndex),currentSequenceTitle,currentSpeechFallback);}
+  }
+
+  function playNaturalSequence(segments,title,rate=1,onTextFallback=null){
+    if(!segments || !segments.length) return false;
+    if(!('speechSynthesis' in window) || !selectedVoice()) return speechTextFallback(segments,title,onTextFallback);
+    stopEverything();
+    sequenceCancelled=false;
+    currentMode='natural';
+    currentSequence=segments.slice();
+    currentSequenceIndex=0;
+    currentSequenceTitle=title||'设备英语语音';
+    currentSpeechRate=Number(rate)||1;
+    currentSpeechFallback=onTextFallback;
+    audioRate.value=String(currentSpeechRate);
+    audioSeek.disabled=true;
+    audioDuration.textContent=voiceAccent.value==='en-GB'?'英式':'美式';
+    openAudioBar(currentSequenceTitle);
+    return speakNextSegment()!==false;
+  }
+
+  function playEmbedded(src,title,rate=1){
+    stopEverything();
+    sequenceCancelled=false;
+    currentMode='embedded';
+    const resolved=OFFLINE_AUDIO[src]||src;
+    if(mainAudio.getAttribute('data-audio-key')!==src){
+      mainAudio.src=resolved;
+      mainAudio.setAttribute('data-audio-key',src);
+      mainAudio.load();
+    }
+    currentSequenceTitle=title||'专业课程音频（待接入）';
+    currentSpeechRate=Number(rate)||1;
+    mainAudio.playbackRate=currentSpeechRate;
+    audioRate.value=String(currentSpeechRate);
+    audioSeek.disabled=false;
+    openAudioBar(currentSequenceTitle);
+    const promise=mainAudio.play();
+    if(promise) promise.catch(()=>showToast('请再点击一次播放按钮。'));
+  }
+
+  function playAudio(src,title,rate=1){
+    if(typeof betaTrackAudioPlay==='function') betaTrackAudioPlay({src,title,rate});
+    const segments=AUDIO_SEGMENTS[src] || [AUDIO_TEXT[src]].filter(Boolean);
+    if(selectedVoice()){
+      playNaturalSequence(segments,title,rate);
+    }else{
+      showToast('当前设备没有可用的英语语音，请先进入发音校准并安装英语语音包。');
+      openPronunciationLab();
+    }
+  }
+
+  function toggleAudio(){
+    if(currentMode==='natural'){
+      if(window.speechSynthesis.paused){
+        window.speechSynthesis.resume();
+        audioPlayPause.textContent='❚❚';
+      }else if(window.speechSynthesis.speaking){
+        window.speechSynthesis.pause();
+        audioPlayPause.textContent='▶';
+      }else if(currentSequence.length){
+        sequenceCancelled=false;
+        speakNextSegment();
+      }
+      return;
+    }
+    if(!mainAudio.src) return;
+    if(mainAudio.paused) mainAudio.play(); else mainAudio.pause();
+  }
+
+  function restartAudio(){
+    if(currentMode==='natural' && currentSequence.length){
+      playNaturalSequence(currentSequence,currentSequenceTitle,currentSpeechRate,currentSpeechFallback);
+    }else if(mainAudio.src){
+      mainAudio.currentTime=0;
+      mainAudio.play();
+    }else{
+      showToast('请先选择一段音频。');
+    }
+  }
+
+  function setAudioRate(value){
+    currentSpeechRate=Number(value)||1;
+    if(currentMode==='natural' && currentSequence.length){
+      playNaturalSequence(currentSequence,currentSequenceTitle,currentSpeechRate,currentSpeechFallback);
+    }else{
+      mainAudio.playbackRate=currentSpeechRate;
+    }
+  }
+
+  function setAudioEngine(value){
+    safeStore.set('audioEngine',value);
+    stopEverything();
+    showToast(value==='natural'?'已切换到本机英语语音。':'专业课程音频（待接入）仅用于应急。');
+  }
+
+  function setVoiceAccent(value){
+    safeStore.set('voiceAccent',value);
+    populateVoiceMenus();
+    stopEverything();
+    showToast(value==='en-GB'?'已选择英式英语。':'已选择美式英语。');
+  }
+
+  function setVoiceSelection(uri){
+    safeStore.set('selectedVoiceURI',uri);
+    const labVoice=document.getElementById('labVoice');
+    if(labVoice) labVoice.value=uri;
+    stopEverything();
+    showToast('已保存当前本机英语语音。');
+  }
+
+  function speakText(text){
+    const segments=(text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[text]).map(s=>s.trim()).filter(Boolean);
+    audioEngine.value='natural';
+    playNaturalSequence(segments,'设备英语语音朗读',1);
+  }
+
+  function openPronunciationLab(){
+    document.getElementById('pronunciationLab').classList.add('open');
+    document.body.style.overflow='hidden';
+    renderPronunciationRows();
+    populateVoiceMenus();
+  }
+
+  function closePronunciationLab(){
+    document.getElementById('pronunciationLab').classList.remove('open');
+    document.body.style.overflow='';
+  }
+
+  function renderPronunciationRows(){
+    const tbody=document.getElementById('pronunciationRows');
+    if(tbody.dataset.ready) return;
+    PRONUNCIATION_LEXICON.forEach((item,index)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td><strong>${item.key}</strong></td>
+        <td class="ipa">${item.ipa}</td>
+        <td class="stress-note">${item.note}</td>
+        <td><button type="button" class="speak-mini" data-pron-index="${index}">🔊 试听</button></td>`;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('[data-pron-index]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const item=PRONUNCIATION_LEXICON[Number(btn.dataset.pronIndex)];
+        playNaturalSequence([item.text],`${item.key} · 发音校准`,1);
+      });
+    });
+    tbody.dataset.ready='1';
+  }
+
+  function playCalibrationSet(){
+    playNaturalSequence([
+      'Student.',
+      'Classmate.',
+      'Twelve years old.',
+      'Sunshine Middle School.',
+      "What's your name?",
+      'Are you in Class One?',
+      'Nice to meet you.'
+    ],'英式发音连续校准',1);
+  }
+
+  function applyLabVoice(){
+    const labAccent=document.getElementById('labAccent').value;
+    const labVoice=document.getElementById('labVoice').value;
+    voiceAccent.value=labAccent;
+    safeStore.set('voiceAccent',labAccent);
+    populateSelect(voiceSelect,labAccent,labVoice);
+    if(labVoice){
+      voiceSelect.value=labVoice;
+      safeStore.set('selectedVoiceURI',labVoice);
+    }
+    audioEngine.value='natural';
+    safeStore.set('audioEngine','natural');
+    showToast('发音设置已保存。请再连续试听一次确认。');
+  }
+
+  document.getElementById('labAccent').addEventListener('change',(e)=>{
+    populateSelect(document.getElementById('labVoice'),e.target.value,'');
+  });
+  document.getElementById('applyVoiceChoice').addEventListener('click',applyLabVoice);
+  document.getElementById('pronunciationLab').addEventListener('click',(e)=>{
+    if(e.target.id==='pronunciationLab') closePronunciationLab();
+  });
+
+  mainAudio.addEventListener('play',()=>audioPlayPause.textContent='❚❚');
+  mainAudio.addEventListener('pause',()=>{if(currentMode==='embedded') audioPlayPause.textContent='▶';});
+  mainAudio.addEventListener('loadedmetadata',()=>audioDuration.textContent=formatTime(mainAudio.duration));
+  mainAudio.addEventListener('timeupdate',()=>{
+    if(currentMode!=='embedded') return;
+    audioCurrent.textContent=formatTime(mainAudio.currentTime);
+    audioSeek.value=mainAudio.duration?(mainAudio.currentTime/mainAudio.duration*100):0;
+  });
+  mainAudio.addEventListener('ended',()=>audioPlayPause.textContent='▶');
+  audioSeek.addEventListener('input',()=>{
+    if(currentMode==='embedded' && mainAudio.duration){
+      mainAudio.currentTime=mainAudio.duration*(Number(audioSeek.value)/100);
+    }
+  });
+
+  const savedEngine=safeStore.get('audioEngine','natural');
+  const savedAccent=safeStore.get('voiceAccent','en-GB');
+  audioEngine.value=savedEngine;
+  voiceAccent.value=savedAccent;
+  audioRate.value='1';
+
+  window.playAudio=playAudio;
+  window.toggleAudio=toggleAudio;
+  window.restartAudio=restartAudio;
+  window.setAudioRate=setAudioRate;
+  window.setAudioEngine=setAudioEngine;
+  window.setVoiceAccent=setVoiceAccent;
+  window.setVoiceSelection=setVoiceSelection;
+  window.speakText=speakText;
+  window.openPronunciationLab=openPronunciationLab;
+  window.closePronunciationLab=closePronunciationLab;
+  window.playCalibrationSet=playCalibrationSet;
+  window.closeAudio=function(){
+    stopEverything();
+    currentMode='none';
+    audioBar.classList.remove('active');
+    document.body.classList.remove('audio-active');
+  };
+
+  function checkReading(){
+    const text=document.getElementById('readingAnswer').value.trim();
+    const feedback=document.getElementById('readingFeedback');
+    if(!text){feedback.textContent='先写下你的理解，再查看参考表达。';return;}
+    feedback.textContent='参考表达：Because she talks with Amy and Miss Green. 请对照原文最后两句，检查你的回答是否说明了交谈对象与心情变化。开放回答采用自查，不自动判对错。';
+    if(window.LearningApp){LearningApp.saveDraft('readingAnswer',text);LearningApp.saveDraft('readingFeedback',feedback.textContent);}
+  }
+
+  window.checkReading=checkReading;
+
+  let dialogueStep=0;
+  function addStudentReply(){
+    const box=document.getElementById('dialogue');
+    const replies=[
+      ['My name is Daniel.','Nice to meet you, Daniel. How old are you?'],
+      ['I am twelve years old.','Great! Which class are you in?'],
+      ['I am in Class One, Grade Seven.','Wonderful! We are ready for the new school day.']
+    ];
+    if(dialogueStep>=replies.length){
+      showToast('本轮示范对话已经完成。');
+      return;
+    }
+    const [student,ai]=replies[dialogueStep];
+    box.insertAdjacentHTML('beforeend',`<div class="bubble student">${student}</div><div class="bubble ai">${ai}</div>`);
+    const replyAudio=['audio/dialogue_q2.mp3','audio/dialogue_q3.mp3','audio/dialogue_q4.mp3'];
+    playAudio(replyAudio[dialogueStep], 'Emma 对话第 '+(dialogueStep+2)+' 句');
+    dialogueStep++;
+  }
+  function startDialogue(){
+    dialogueStep=0;
+    document.getElementById('dialogue').innerHTML='<div class="bubble ai">Hello! Nice to meet you. What’s your name?</div>';
+    playAudio('audio/dialogue_q1.mp3','Emma：What’s your name?');
+  }
+  window.addStudentReply=addStudentReply;
+  window.startDialogue=startDialogue;
+
+  const aiPanel=document.getElementById('aiPanel');
+  document.getElementById('aiToggle').addEventListener('click',()=>aiPanel.classList.toggle('open'));
+  function aiReply(q){
+    if(window.Curriculum)return Curriculum.reply(q);
+    const t=q.toLowerCase();
+    if(/\bam\b|be动词|be 动词|为什么i/i.test(t)) return 'I 是英语中的特殊主语，固定和 am 搭配：I am。You 和复数主语通常用 are，he、she、it 通常用 is。';
+    if(t.includes('classmate')) return 'classmate 表示同班同学；classmates 是复数。We are classmates. 意思是我们是同班同学。';
+    if(t.includes('grade')) return 'Grade 7 是七年级；Class 3 是三班。I am in Class 3, Grade 7. 注意区分班级和年级。';
+    if(t.includes('friendly')) return 'friendly 表示友好的，是形容词。She is friendly. 意思是她很友好。';
+    if(t.includes('阅读')||t.includes('lily')) return 'Lily 起初有点紧张。After talking with Amy and Miss Green, I feel much better. 这句话说明她交谈后感觉好多了。';
+    if(t.includes('student')) return 'student 表示“学生”。可以用句子 I am a student. 来记忆，并注意第一个音节重读。';
+    if(t.includes('nervous')) return 'nervous 表示“紧张的”。例如：At first, I feel a little nervous.';
+    if(t.includes('介绍') || t.includes('introduce')) return '可以从五句话开始：My name is… I am… years old. I am in Grade 7. I like… Nice to meet you.';
+    return '我可以帮助你复习本主题的固定知识点：am / is / are、student、classmate、grade、friendly、nervous、自我介绍与阅读原文。请试试其中一个关键词；其他问题可以记录下来请教老师。';
+  }
+  document.getElementById('aiSend').addEventListener('click',()=>{
+    const input=document.getElementById('aiInput');
+    const q=input.value.trim();
+    if(!q)return;
+    const log=document.getElementById('aiLog');
+    log.insertAdjacentHTML('beforeend',`<div class="ai-msg user">${q.replace(/[<>]/g,'')}</div>`);
+    log.insertAdjacentHTML('beforeend',`<div class="ai-msg">${aiReply(q)}</div>`);
+    input.value='';
+    log.scrollTop=log.scrollHeight;
+  });
+  document.getElementById('aiInput').addEventListener('keydown',e=>{
+    if(e.key==='Enter')document.getElementById('aiSend').click();
+  });
+
+
+  function updateHomeDateAndGreeting(){
+    const now=new Date();
+    const beijing=new Date(now.getTime()+8*60*60*1000);
+    const hour=beijing.getUTCHours();
+    let greeting='晚上好';
+    if(hour<6) greeting='夜深了';
+    else if(hour<11) greeting='早上好';
+    else if(hour<14) greeting='中午好';
+    else if(hour<18) greeting='下午好';
+    const weekdays=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+    const dateText=`${beijing.getUTCMonth()+1}月${beijing.getUTCDate()}日 · ${weekdays[beijing.getUTCDay()]}`;
+    const greetingEl=document.getElementById('homeGreeting');
+    const dateEl=document.getElementById('homeDate');
+    if(greetingEl) greetingEl.textContent=greeting;
+    if(dateEl) dateEl.textContent=dateText;
+  }
+
+  const homeTaskBoxes=[...document.querySelectorAll('[data-home-task]')];
+  function syncHomeTasks(){
+    homeTaskBoxes.forEach(box=>{
+      const key=box.dataset.homeTask;
+      box.checked=!!saved[key];
+      box.closest('.home-task').classList.toggle('completed',box.checked);
+    });
+    const {done,total,percent}=EnglishCore.progress(saved,safeStore.get('studyMode','standard'));
+    const countEl=document.getElementById('homeTaskCount');
+    const percentEl=document.getElementById('homeTaskPercent');
+    const bar=document.getElementById('homeProgressBar');
+    if(countEl) countEl.textContent=`${done} / ${total}`;
+    if(percentEl) percentEl.textContent=`${percent}%`;
+    if(bar) bar.style.width=`${percent}%`;
+  }
+
+  homeTaskBoxes.forEach(box=>{
+    box.addEventListener('change',()=>{
+      const key=box.dataset.homeTask;
+      saved[key]=box.checked;
+      safeStore.set('englishGrowthTasks',JSON.stringify(saved));
+      const todayBox=document.querySelector(`[data-task="${key}"]`);
+      if(todayBox){
+        todayBox.checked=box.checked;
+        todayBox.closest('.task').classList.toggle('completed',box.checked);
+      }
+      updateProgress();
+      syncHomeTasks();
+    });
+  });
+
+  document.querySelectorAll('[data-study-mode]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('[data-study-mode]').forEach(x=>x.classList.remove('active'));
+      btn.classList.add('active');
+      const light=btn.dataset.studyMode==='light';
+      document.querySelectorAll('.optional-home-task').forEach(item=>{
+        item.style.display=light?'none':'grid';
+      });
+      const timeMap=light
+        ? {'vocab':'5分钟','lesson':'6分钟','reading':'4分钟','speaking':'3分钟','review':'0分钟'}
+        : {'vocab':'8分钟','lesson':'10分钟','reading':'10分钟','speaking':'5分钟','review':'2分钟'};
+      document.querySelectorAll('.home-task').forEach(item=>{
+        const key=item.querySelector('input').dataset.homeTask;
+        item.querySelector('em').textContent=timeMap[key];
+      });
+      safeStore.set('studyMode',light?'light':'standard');
+    });
+  });
+
+  const savedMode=safeStore.get('studyMode','standard');
+  const modeButton=document.querySelector(`[data-study-mode="${savedMode}"]`);
+  if(modeButton) modeButton.click();
+
+  const mobileNav=[...document.querySelectorAll('[data-mobile-view]')];
+  mobileNav.forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      openView(btn.dataset.mobileView);
+      mobileNav.forEach(x=>x.classList.toggle('active',x===btn));
+    });
+  });
+
+  // Extend the original view switcher so mobile navigation always follows the current page.
+  const originalOpenView=openView;
+  openView=function(id){
+    originalOpenView(id);
+    mobileNav.forEach(btn=>btn.classList.toggle('active',btn.dataset.mobileView===id));
+    syncHomeTasks();
+  };
+
+  updateHomeDateAndGreeting();
+  syncHomeTasks();
+
+
+  const BETA_STORAGE_KEY='englishBetaDataV22';
+  const BETA_LEGACY_STORAGE_KEY='englishBetaDataV21';
+  const LEARNER_PROFILE_KEY='englishLearnerProfileV22';
+  const ACTIVE_LEARNING_SESSION_KEY='englishActiveLearningSessionV22';
+  const BETA_VERSION='2.2';
+  const VIEW_NAMES={
+    home:'首页',offline:'离线学习',today:'今日任务',exam:'能力训练',readwrite:'中考读写专项',course:'译林同步课堂',words:'词汇积累',literacy:'学以致用',reading:'课外阅读',classics:'连云港书目',
+    speaking:'听力与口语',assessment:'基础练习',growth:'成长档案',
+    parent:'家长中心',beta:'内测中心',iteration:'迭代管理'
+  };
+
+  let betaData=loadBetaData();
+  let betaCurrentView=document.querySelector('.view.active')?.id||'home';
+  let betaViewStartedAt=Date.now();
+  let betaSessionId='';
+  let betaLastAudioContext=null;
+
+  function blankBetaData(){
+    return {
+      version:BETA_VERSION,
+      createdAt:new Date().toISOString(),
+      sessions:[],
+      views:{},
+      events:[],
+      issues:[],
+      audioReviews:[],
+      parentLogs:[],
+      audioPlays:[],
+      learningSessions:[],
+      hypotheses:[],
+      qaChecklist:{},
+      releases:[],
+      backups:[],
+      lastExit:null
+    };
+  }
+
+  function loadBetaData(){
+    try{
+      let raw=safeStore.get(BETA_STORAGE_KEY,'');
+      if(!raw) raw=safeStore.get(BETA_LEGACY_STORAGE_KEY,'');
+      const parsed=JSON.parse(raw||'null');
+      if(parsed && typeof parsed==='object'){
+        const merged=Object.assign(blankBetaData(),parsed);
+        if(!Array.isArray(merged.learningSessions)) merged.learningSessions=[];
+        if(!Array.isArray(merged.hypotheses)) merged.hypotheses=[];
+        if(!merged.qaChecklist || typeof merged.qaChecklist!=='object') merged.qaChecklist={};
+        if(!Array.isArray(merged.releases)) merged.releases=[];
+        if(!Array.isArray(merged.backups)) merged.backups=[];
+        merged.issues=(merged.issues||[]).map(issue=>{
+          let status=issue.status||'new';
+          if(status==='open') status='new';
+          return Object.assign({fixNote:'',fixedIn:'',retestNote:''},issue,{status});
+        });
+        return merged;
+      }
+    }catch(e){}
+    return blankBetaData();
+  }
+
+  function saveBetaData(){
+    if(window.restoringSnapshot)return true;
+    return safeStore.set(BETA_STORAGE_KEY,JSON.stringify(betaData));
+  }
+
+  function uid(prefix){
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  }
+
+  function betaStartSession(){
+    betaSessionId=uid('session');
+    betaData.sessions.push({
+      id:betaSessionId,
+      start:new Date().toISOString(),
+      end:null,
+      durationMs:0,
+      lastView:betaCurrentView
+    });
+    betaTrackEvent('session_start',{view:betaCurrentView});
+    saveBetaData();
+  }
+
+  function betaFindSession(){
+    return betaData.sessions.find(s=>s.id===betaSessionId);
+  }
+
+  function betaCommitViewTime(){
+    const now=Date.now();
+    const elapsed=Math.max(0,now-betaViewStartedAt);
+    const view=betaCurrentView||'home';
+    if(!betaData.views[view]) betaData.views[view]={visits:0,ms:0};
+    betaData.views[view].ms+=elapsed;
+    const session=betaFindSession();
+    if(session){
+      session.durationMs=(session.durationMs||0)+elapsed;
+      session.lastView=view;
+    }
+    betaViewStartedAt=now;
+  }
+
+  function betaTrackView(id){
+    if(!id || id===betaCurrentView) return;
+    betaCommitViewTime();
+    betaCurrentView=id;
+    betaViewStartedAt=Date.now();
+    if(!betaData.views[id]) betaData.views[id]={visits:0,ms:0};
+    betaData.views[id].visits+=1;
+    betaTrackEvent('view_open',{view:id});
+    saveBetaData();
+    if(id==='beta') renderBetaDashboard();
+  }
+
+  function betaTrackEvent(type,data={}){
+    betaData.events.push({
+      id:uid('event'),
+      type,
+      data,
+      view:betaCurrentView,
+      at:new Date().toISOString()
+    });
+    if(betaData.events.length>800) betaData.events=betaData.events.slice(-800);
+    saveBetaData();
+  }
+
+  function betaTrackAudioPlay(context){
+    betaLastAudioContext={
+      src:context.src||'',
+      title:context.title||'课程语音',
+      rate:Number(context.rate)||1,
+      accent:document.getElementById('voiceAccent')?.value||'en-GB',
+      voice:document.getElementById('voiceSelect')?.selectedOptions?.[0]?.textContent||'未选择',
+      view:betaCurrentView,
+      at:new Date().toISOString()
+    };
+    betaData.audioPlays.push(betaLastAudioContext);
+    if(betaData.audioPlays.length>300) betaData.audioPlays=betaData.audioPlays.slice(-300);
+    betaTrackEvent('audio_play',betaLastAudioContext);
+  }
+
+  function betaFinishSession(reason='pagehide'){
+    if(window.restoringSnapshot)return;
+    betaCommitViewTime();
+    const session=betaFindSession();
+    if(session){
+      session.end=new Date().toISOString();
+      session.exitReason=reason;
+      session.lastView=betaCurrentView;
+    }
+    betaData.lastExit={
+      view:betaCurrentView,
+      scrollY:Math.round(window.scrollY||0),
+      at:new Date().toISOString(),
+      reason
+    };
+    saveBetaData();
+  }
+
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){
+      betaFinishSession('hidden');
+    }else{
+      betaViewStartedAt=Date.now();
+    }
+  });
+  window.addEventListener('pagehide',()=>betaFinishSession('pagehide'));
+
+  function formatDuration(ms){
+    const totalSeconds=Math.round((ms||0)/1000);
+    if(totalSeconds<60) return `${totalSeconds}秒`;
+    const minutes=Math.floor(totalSeconds/60);
+    const seconds=totalSeconds%60;
+    if(minutes<60) return seconds?`${minutes}分${seconds}秒`:`${minutes}分钟`;
+    const hours=Math.floor(minutes/60);
+    return `${hours}小时${minutes%60}分钟`;
+  }
+
+  function escapeHtml(value){
+    return String(value??'')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+      .replace(/'/g,"&#039;");
+  }
+
+  function currentViewName(){
+    return VIEW_NAMES[betaCurrentView]||betaCurrentView||'未知页面';
+  }
+
+  function openFeedbackModal(prefill={}){
+    const modal=document.getElementById('feedbackModal');
+    document.getElementById('submitFeedback').disabled=false;
+    document.getElementById('feedbackCurrentView').textContent=currentViewName();
+    document.getElementById('feedbackCategory').value=prefill.category||'发音不准确';
+    document.getElementById('feedbackPriority').value=prefill.priority||'P1';
+    document.getElementById('feedbackTitle').value=prefill.title||'';
+    document.getElementById('feedbackDetails').value=prefill.details||'';
+    document.getElementById('feedbackExpected').value=prefill.expected||'';
+    document.getElementById('feedbackStatus').textContent='';
+    modal.classList.add('open');
+    document.body.style.overflow='hidden';
+  }
+
+  function closeFeedbackModal(){
+    document.getElementById('feedbackModal').classList.remove('open');
+    document.body.style.overflow='';
+  }
+
+  function submitBetaFeedback(){
+    const submit=document.getElementById('submitFeedback');
+    if(submit.disabled)return;
+    const title=document.getElementById('feedbackTitle').value.trim();
+    const details=document.getElementById('feedbackDetails').value.trim();
+    if(!title || !details){
+      document.getElementById('feedbackStatus').textContent='请填写问题标题和具体情况。';
+      return;
+    }
+    const issue={
+      id:uid('issue'),
+      category:document.getElementById('feedbackCategory').value,
+      priority:document.getElementById('feedbackPriority').value,
+      title,
+      details,
+      expected:document.getElementById('feedbackExpected').value.trim(),
+      view:betaCurrentView,
+      viewName:currentViewName(),
+      scrollY:Math.round(window.scrollY||0),
+      status:'new',
+      createdAt:new Date().toISOString(),
+      resolvedAt:null
+    };
+    const candidate={...betaData,issues:[issue,...betaData.issues],events:[...betaData.events,{
+      id:uid('event'),type:'issue_created',data:{issueId:issue.id,priority:issue.priority,category:issue.category},
+      view:betaCurrentView,at:new Date().toISOString()
+    }].slice(-800)};
+    if(!safeStore.set(BETA_STORAGE_KEY,JSON.stringify(candidate))){
+      document.getElementById('feedbackStatus').textContent='未能保存，输入内容仍保留。请重试，或先复制反馈文字。';
+      return;
+    }
+    betaData=candidate;
+    submit.disabled=true;
+    document.getElementById('feedbackStatus').textContent='问题已保存到本机；未发送给站主。可在使用反馈页导出后分享。';
+    renderBetaDashboard();
+  }
+
+  function saveAudioReview(rating){
+    if(!betaLastAudioContext){
+      showToast('请先播放一段课程语音，再进行评价。');
+      return;
+    }
+    const review={
+      id:uid('audio'),
+      rating,
+      ...betaLastAudioContext,
+      createdAt:new Date().toISOString()
+    };
+    betaData.audioReviews.unshift(review);
+    betaTrackEvent('audio_review',{rating,title:review.title});
+    saveBetaData();
+    document.querySelectorAll('[data-audio-rating]').forEach(btn=>{
+      btn.classList.toggle('selected',btn.dataset.audioRating===rating);
+    });
+    showToast(`已记录：${rating}`);
+    if(rating==='不准确'){
+      openFeedbackModal({
+        category:'发音不准确',
+        priority:'P0',
+        title:`${review.title}：发音不准确`,
+        details:`音频：${review.title}\n口音：${review.accent}\n语速：${review.rate}×\n具体不准确的单词或句子：`,
+        expected:'更换为经过人工审听的标准英式录音。'
+      });
+    }
+    renderBetaDashboard();
+  }
+
+  function saveParentObservation(){
+    const hardest=document.getElementById('parentHardest').value.trim();
+    const favorite=document.getElementById('parentFavorite').value.trim();
+    const observation=document.getElementById('parentObservation').value.trim();
+    const status=document.getElementById('parentLogStatus');
+    if(!hardest&&!favorite&&!observation){status.textContent='请至少填写一项观察。';return;}
+    const log={id:uid('parent'),date:new Date().toISOString(),startMode:document.getElementById('parentStartMode').value,engagement:Number(document.getElementById('parentEngagement').value),hardest,favorite,observation};
+    const candidate={...betaData,parentLogs:[log,...betaData.parentLogs]};
+    if(!safeStore.set(BETA_STORAGE_KEY,JSON.stringify(candidate))){status.textContent='未能保存，输入内容已保留。请先导出备份。';return;}
+    betaData=candidate;
+    status.textContent='今日观察已保存。';
+    ['parentHardest','parentFavorite','parentObservation'].forEach(id=>document.getElementById(id).value='');
+    if(window.LearningApp){LearningApp.clearParentDraft();LearningApp.render();}
+    renderBetaDashboard();
+  }
+
+  function renderBetaDashboard(){
+    if(!document.getElementById('betaSessionCount')) return;
+    betaCommitViewTime();
+
+    const totalMs=Object.values(betaData.views).reduce((sum,item)=>sum+(item.ms||0),0);
+    const openIssues=betaData.issues.filter(i=>i.status!=='resolved');
+    const audioProblems=betaData.audioReviews.filter(r=>r.rating!=='准确');
+
+    document.getElementById('betaSessionCount').textContent=betaData.sessions.length;
+    document.getElementById('betaMinutes').textContent=formatDuration(totalMs);
+    document.getElementById('betaOpenIssues').textContent=openIssues.length;
+    document.getElementById('betaAudioProblems').textContent=audioProblems.length;
+
+    const usageRows=document.getElementById('betaUsageRows');
+    const entries=Object.entries(betaData.views)
+      .filter(([,v])=>(v.visits||0)>0 || (v.ms||0)>0)
+      .sort((a,b)=>(b[1].ms||0)-(a[1].ms||0));
+    usageRows.innerHTML=entries.length?entries.map(([id,v])=>{
+      const share=totalMs?Math.round((v.ms||0)/totalMs*100):0;
+      return `<tr>
+        <td>${escapeHtml(VIEW_NAMES[id]||id)}</td>
+        <td>${v.visits||0}</td>
+        <td>${formatDuration(v.ms||0)}</td>
+        <td>${share}%</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="4">尚未形成记录。</td></tr>';
+
+    const lastExit=betaData.lastExit;
+    document.getElementById('betaLastExit').textContent=lastExit
+      ?`最近退出位置：${VIEW_NAMES[lastExit.view]||lastExit.view}，页面纵向位置 ${lastExit.scrollY}px，${new Date(lastExit.at).toLocaleString('zh-CN')}`
+      :'最近退出位置：尚无记录';
+
+    const statusFilter=document.getElementById('issueStatusFilter')?.value||'all';
+    const priorityFilter=document.getElementById('issuePriorityFilter')?.value||'all';
+    const filteredIssues=betaData.issues.filter(issue=>
+      (statusFilter==='all'||issue.status===statusFilter) &&
+      (priorityFilter==='all'||issue.priority===priorityFilter)
+    );
+    const issueList=document.getElementById('issueList');
+    issueList.innerHTML=filteredIssues.length?filteredIssues.map(issue=>`
+      <article class="issue-card">
+        <div class="issue-top">
+          <span class="issue-priority ${escapeHtml(issue.priority)}">${escapeHtml(issue.priority)}</span>
+          <small>${escapeHtml(ISSUE_STATUS_LABELS[issue.status]||issue.status)}</small>
+        </div>
+        <h4>${escapeHtml(issue.title)}</h4>
+        <p><strong>${escapeHtml(issue.category)}</strong> · ${escapeHtml(issue.details)}</p>
+        ${issue.expected?`<p>期望：${escapeHtml(issue.expected)}</p>`:''}
+        <div class="issue-meta">
+          <span>${escapeHtml(issue.viewName||VIEW_NAMES[issue.view]||issue.view)}</span>
+          <span>${new Date(issue.createdAt).toLocaleString('zh-CN')}</span>
+        </div>
+        <div class="issue-actions">
+          <button type="button" data-issue-action="toggle" data-issue-id="${escapeHtml(issue.id)}">
+            ${issue.status==='resolved'?'已关闭':'推进到下一状态'}
+          </button>
+          <button type="button" class="delete" data-issue-action="delete" data-issue-id="${escapeHtml(issue.id)}">删除</button>
+        </div>
+      </article>
+    `).join(''):'<div class="empty-state">当前筛选条件下没有问题记录。</div>';
+
+    issueList.querySelectorAll('[data-issue-action]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const issue=betaData.issues.find(i=>i.id===btn.dataset.issueId);
+        if(!issue) return;
+        if(btn.dataset.issueAction==='toggle'){
+          const flow=['new','confirmed','fixed','retest','resolved'];
+          const current=Math.max(0,flow.indexOf(issue.status));
+          issue.status=flow[Math.min(current+1,flow.length-1)];
+          issue.resolvedAt=issue.status==='resolved'?new Date().toISOString():null;
+          betaTrackEvent('issue_status_changed',{issueId:issue.id,status:issue.status});
+        }else{
+          betaData.issues=betaData.issues.filter(i=>i.id!==issue.id);
+          betaTrackEvent('issue_deleted',{issueId:issue.id});
+        }
+        saveBetaData();
+        renderBetaDashboard();
+      });
+    });
+
+    const audioList=document.getElementById('audioReviewList');
+    audioList.innerHTML=betaData.audioReviews.length?betaData.audioReviews.slice(0,12).map(review=>`
+      <article class="audio-review-card">
+        <div class="audio-review-top">
+          <strong>${escapeHtml(review.title)}</strong>
+          <span class="issue-priority ${review.rating==='不准确'?'P0':review.rating==='基本准确'?'P1':'P3'}">${escapeHtml(review.rating)}</span>
+        </div>
+        <p>${escapeHtml(review.viewName||VIEW_NAMES[review.view]||review.view)} · ${escapeHtml(review.accent)} · ${escapeHtml(review.rate)}×</p>
+        <div class="audio-review-meta">
+          <span>${escapeHtml(review.voice)}</span>
+          <span>${new Date(review.createdAt).toLocaleString('zh-CN')}</span>
+        </div>
+      </article>
+    `).join(''):'<div class="empty-state">播放课程语音后，可在播放器中选择“准确、基本准确或不准确”。</div>';
+
+    ['P0','P1','P2','P3'].forEach(priority=>{
+      document.getElementById(`iteration${priority}`).textContent=
+        openIssues.filter(issue=>issue.priority===priority).length;
+    });
+    saveBetaData();
+  }
+
+  function downloadText(filename,text,type='text/plain;charset=utf-8'){
+    const blob=new Blob([text],{type});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function csvEscape(value){
+    const text=String(value??'').replace(/"/g,'""');
+    return `"${text}"`;
+  }
+
+  function exportBetaJson(){
+    betaCommitViewTime();
+    saveBetaData();
+    downloadText(
+      `AI英语成长空间_家庭内测记录_${EnglishCore.dayKey()}.json`,
+      JSON.stringify(betaData,null,2),
+      'application/json;charset=utf-8'
+    );
+  }
+
+  function exportIssuesCsv(){
+    const header=['优先级','状态','类型','标题','具体问题','期望改进','页面','记录时间'];
+    const rows=betaData.issues.map(i=>[
+      i.priority,i.status,i.category,i.title,i.details,i.expected,
+      i.viewName||VIEW_NAMES[i.view]||i.view,new Date(i.createdAt).toLocaleString('zh-CN')
+    ]);
+    const csv='\ufeff'+[header,...rows].map(row=>row.map(csvEscape).join(',')).join('\n');
+    downloadText(`内测问题_${EnglishCore.dayKey()}.csv`,csv,'text/csv;charset=utf-8');
+  }
+
+  function exportParentLogsCsv(){
+    const header=['日期','开始方式','投入状态','最困难','最喜欢','其他观察'];
+    const rows=betaData.parentLogs.map(l=>[
+      new Date(l.date).toLocaleString('zh-CN'),l.startMode,l.engagement,l.hardest,l.favorite,l.observation
+    ]);
+    const csv='\ufeff'+[header,...rows].map(row=>row.map(csvEscape).join(',')).join('\n');
+    downloadText(`家长观察日志_${EnglishCore.dayKey()}.csv`,csv,'text/csv;charset=utf-8');
+  }
+
+  function clearBetaData(){
+    const confirmation=window.confirm('确定清空全部内测记录吗？此操作不可恢复。建议先导出数据。');
+    if(!confirmation) return;
+    betaData=blankBetaData();
+    saveBetaData();
+  
+  betaStartSession();
+    renderBetaDashboard();
+    showToast('内测记录已清空。');
+  }
+
+
+  const TEST_PLAN=[
+    {title:'能否独立进入',focus:'观察是否能找到“开始今日学习”，家长尽量不提示。'},
+    {title:'单词是否好用',focus:'验证单词学习、记忆和反馈是否简单清楚。'},
+    {title:'语法是否理解',focus:'验证解释是否适合孩子，而不是只会选择答案。'},
+    {title:'阅读是否过量',focus:'观察文字长度、问题难度和中途退出情况。'},
+    {title:'发音是否可靠',focus:'逐句审听重点词、语调和自然度。'},
+    {title:'综合流程是否顺',focus:'完成一次标准学习，记录所有停顿和求助。'},
+    {title:'是否愿意继续',focus:'回顾7天，判断孩子是否愿意主动再次使用。'}
+  ];
+
+  let learnerProfile=loadLearnerProfile();
+  let activeLearningSession=loadActiveLearningSession();
+  let learningTimerHandle=null;
+  let pendingSessionDurationMs=0;
+
+  function defaultLearnerProfile(){
+    return {
+      nickname:'英语小探索者',
+      grade:'七年级',
+      targetMinutes:35,
+      weeklyDays:6,
+      betaFocus:'孩子能否独立完成',
+      betaStartDate:EnglishCore.dayKey(),
+      createdAt:new Date().toISOString()
+    };
+  }
+
+  function loadLearnerProfile(){
+    try{
+      const parsed=JSON.parse(safeStore.get(LEARNER_PROFILE_KEY,'')||'null');
+      return parsed&&typeof parsed==='object'?Object.assign(defaultLearnerProfile(),parsed):null;
+    }catch(e){return null;}
+  }
+
+  function saveLearnerProfile(profile){
+    const next=Object.assign(defaultLearnerProfile(),profile);
+    next.targetMinutes=Number(next.targetMinutes)===18?18:35;
+    if(!safeStore.set(LEARNER_PROFILE_KEY,JSON.stringify(next)))return false;
+    learnerProfile=next;
+    safeStore.set('studyMode',next.targetMinutes===18?'light':'standard');
+    applyLearnerProfile();if(window.LearningApp)LearningApp.syncMode();
+    return true;
+  }
+
+  function loadActiveLearningSession(){
+    try{
+      const parsed=JSON.parse(safeStore.get(ACTIVE_LEARNING_SESSION_KEY,'')||'null');
+      if(!parsed||!parsed.id||!Number.isFinite(Date.parse(parsed.startAt)))return null;
+      if(learningSessions().some(s=>s.id===parsed.id)){safeStore.remove(ACTIVE_LEARNING_SESSION_KEY);return null;}
+      const age=Date.now()-Date.parse(parsed.restoredAt||parsed.startAt);
+      if(age>86400000){safeStore.remove(ACTIVE_LEARNING_SESSION_KEY);return null;}
+      return {...parsed,elapsedMs:Number.isFinite(parsed.elapsedMs)?parsed.elapsedMs:0,resumedAt:document.hidden?null:Date.now()};
+    }catch(e){return null;}
+  }
+
+  function saveActiveLearningSession(){
+    if(window.restoringSnapshot)return;
+    if(activeLearningSession){
+      safeStore.set(ACTIVE_LEARNING_SESSION_KEY,JSON.stringify(activeLearningSession));
+    }else{
+      safeStore.remove(ACTIVE_LEARNING_SESSION_KEY);
+    }
+  }
+
+  function openLearnerSetup(){
+    const profile=learnerProfile||defaultLearnerProfile();
+    document.getElementById('learnerNicknameInput').value=profile.nickname||'';
+    document.getElementById('learnerGradeInput').value=profile.grade;
+    document.getElementById('learnerTargetMinutes').value=String(profile.targetMinutes);
+    document.getElementById('learnerWeeklyDays').value=String(profile.weeklyDays);
+    document.getElementById('learnerBetaFocus').value=profile.betaFocus;
+    document.getElementById('learnerSetupModal').classList.add('open');
+    document.body.style.overflow='hidden';
+  }
+
+  function closeLearnerSetup(){
+    document.getElementById('learnerSetupModal').classList.remove('open');
+    document.body.style.overflow='';
+  }
+
+  function readSetupForm(){
+    return {
+      nickname:document.getElementById('learnerNicknameInput').value.trim()||'英语小探索者',
+      grade:document.getElementById('learnerGradeInput').value,
+      targetMinutes:Number(document.getElementById('learnerTargetMinutes').value)||30,
+      weeklyDays:Number(document.getElementById('learnerWeeklyDays').value)||6,
+      betaFocus:document.getElementById('learnerBetaFocus').value,
+      betaStartDate:learnerProfile?.betaStartDate||EnglishCore.dayKey(),
+      createdAt:learnerProfile?.createdAt||new Date().toISOString()
+    };
+  }
+
+  function applyLearnerProfile(){
+    const profile=learnerProfile||defaultLearnerProfile();
+    const sidebar=document.getElementById('sidebarNickname');
+    const meta=document.getElementById('sidebarProfileMeta');
+    const homeNickname=document.getElementById('homeNickname');
+    const target=document.getElementById('sessionTargetText');
+    if(sidebar) sidebar.textContent=profile.nickname;
+    if(meta) meta.textContent=`${profile.grade} · 一起慢慢进步`;
+    if(homeNickname) homeNickname.textContent=profile.nickname;
+    if(target) target.textContent=`今日目标 ${profile.targetMinutes}分钟`;
+    renderSevenDayPlan();
+  }
+
+  function currentTestDayIndex(){
+    const start=new Date(`${(learnerProfile||defaultLearnerProfile()).betaStartDate}T00:00:00`);
+    const today=new Date();
+    const localToday=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+    return Math.max(0,Math.min(6,Math.floor((localToday-start)/(24*60*60*1000))));
+  }
+
+  function dateKey(value){return EnglishCore.dayKey(value);}
+
+  function learningSessions(){
+    if(!Array.isArray(betaData.learningSessions)) betaData.learningSessions=[];
+    return betaData.learningSessions;
+  }
+
+  function renderSevenDayPlan(){
+    const grid=document.getElementById('sevenDayGrid');
+    if(!grid) return;
+    const index=currentTestDayIndex();
+    const completedDates=new Set(learningSessions().map(s=>dateKey(s.endAt||s.startAt)));
+    const startDate=new Date(`${(learnerProfile||defaultLearnerProfile()).betaStartDate}T00:00:00`);
+    grid.innerHTML=TEST_PLAN.map((item,i)=>{
+      const d=new Date(startDate);
+      d.setDate(d.getDate()+i);
+      const key=dateKey(d);
+      const done=completedDates.has(key);
+      const state=done?'done':i===index?'current':'';
+      return `<article class="test-day-card{% endraw %}

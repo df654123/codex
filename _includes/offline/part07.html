@@ -1,0 +1,617 @@
+{% raw %}  new Date(2024, 8, 28),
+     * ]
+     *
+     * const reviews: FSRSHistory[] = []
+     * for (let i = 0; i < grades.length; i++) {
+     *   reviews.push({
+     *     rating: grades[i],
+     *     review: reviews_at[i],
+     *   })
+     * }
+     *
+     * const results_short = scheduler.reschedule(
+     *   createEmptyCard(),
+     *   reviews,
+     *   {
+     *     skipManual: false,
+     *   }
+     * )
+     * console.log(results_short)
+     * ```
+     */
+    reschedule(current_card, reviews = [], options = {}) {
+      const {
+        recordLogHandler,
+        reviewsOrderBy,
+        skipManual = true,
+        now = /* @__PURE__ */ new Date(),
+        update_memory_state: updateMemoryState = false
+      } = options;
+      if (reviewsOrderBy && typeof reviewsOrderBy === "function") {
+        reviews.sort(reviewsOrderBy);
+      }
+      if (skipManual) {
+        reviews = reviews.filter((review) => review.rating !== Rating.Manual);
+      }
+      const rescheduleSvc = new Reschedule(this);
+      const collections = rescheduleSvc.reschedule(
+        options.first_card || createEmptyCard(),
+        reviews
+      );
+      const len = collections.length;
+      const cur_card = TypeConvert.card(current_card);
+      const manual_item = rescheduleSvc.calculateManualRecord(
+        cur_card,
+        now,
+        len ? collections[len - 1] : void 0,
+        updateMemoryState
+      );
+      return {
+        collections: typeof recordLogHandler === "function" ? collections.map(recordLogHandler) : collections,
+        reschedule_item: manual_item ? applyAfterHandler(manual_item, recordLogHandler) : null
+      };
+    }
+  }
+  const fsrs = (params) => {
+    return new FSRS(params || {});
+  };
+
+  exports.AbstractScheduler = AbstractScheduler;
+  exports.BasicLearningStepsStrategy = BasicLearningStepsStrategy;
+  exports.CLAMP_PARAMETERS = CLAMP_PARAMETERS;
+  exports.ConvertStepUnitToMinutes = ConvertStepUnitToMinutes;
+  exports.DefaultInitSeedStrategy = DefaultInitSeedStrategy;
+  exports.FSRS = FSRS;
+  exports.FSRS5_DEFAULT_DECAY = FSRS5_DEFAULT_DECAY;
+  exports.FSRS6_DEFAULT_DECAY = FSRS6_DEFAULT_DECAY;
+  exports.FSRSAlgorithm = FSRSAlgorithm;
+  exports.FSRSVersion = FSRSVersion;
+  exports.GenSeedStrategyWithCardId = GenSeedStrategyWithCardId;
+  exports.Grades = Grades;
+  exports.INIT_S_MAX = INIT_S_MAX;
+  exports.Rating = Rating;
+  exports.S_MAX = S_MAX;
+  exports.S_MIN = S_MIN;
+  exports.State = State;
+  exports.StrategyMode = StrategyMode;
+  exports.TypeConvert = TypeConvert;
+  exports.W17_W18_Ceiling = W17_W18_Ceiling;
+  exports.checkParameters = checkParameters;
+  exports.clamp = clamp;
+  exports.clipParameters = clipParameters;
+  exports.computeDecayFactor = computeDecayFactor;
+  exports.createEmptyCard = createEmptyCard;
+  exports.dateDiffInDays = dateDiffInDays;
+  exports.date_diff = date_diff;
+  exports.date_scheduler = date_scheduler;
+  exports.default_enable_fuzz = default_enable_fuzz;
+  exports.default_enable_short_term = default_enable_short_term;
+  exports.default_learning_steps = default_learning_steps;
+  exports.default_maximum_interval = default_maximum_interval;
+  exports.default_relearning_steps = default_relearning_steps;
+  exports.default_request_retention = default_request_retention;
+  exports.default_w = default_w;
+  exports.fixDate = fixDate;
+  exports.fixRating = fixRating;
+  exports.fixState = fixState;
+  exports.forgetting_curve = forgetting_curve;
+  exports.formatDate = formatDate;
+  exports.fsrs = fsrs;
+  exports.generatorParameters = generatorParameters;
+  exports.get_fuzz_range = get_fuzz_range;
+  exports.migrateParameters = migrateParameters;
+  exports.roundTo = roundTo;
+  exports.show_diff_message = show_diff_message;
+
+}));
+//# sourceMappingURL=index.umd.js.map
+
+</script>
+<script data-bundled-src="review-core.js">
+/* WordMemoryCore: local FSRS-6 review records. See docs/open-source-20261030.md. */
+(function (root, factory) {
+  'use strict';
+  const library = typeof module !== 'undefined' && module.exports
+    ? require('./vendor/ts-fsrs-5.4.2.umd.js')
+    : (root.FSRS || globalThis.FSRS);
+  const api = factory(library);
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.WordMemoryCore = api;
+})(typeof window === 'undefined' ? globalThis : window, function (FSRS) {
+  'use strict';
+  if (!FSRS || typeof FSRS.fsrs !== 'function' || !String(FSRS.FSRSVersion).includes('5.4.2')) {
+    throw Error('复习引擎未加载：请先加载本站固定的 ts-fsrs 5.4.2 文件。');
+  }
+  const MODES = ['meaning', 'spelling'];
+  const MAX_CARDS = 10000;
+  const MAX_LOGS = 250000;
+  const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
+  const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const plain = value => {
+    if (!value || Object.prototype.toString.call(value) !== '[object Object]') return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === null || Object.getPrototypeOf(proto) === null;
+  };
+  const fail = message => { throw Error('复习记录：' + message); };
+  const ordered = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  const eventOrder = (a, b) => ordered(a.at, b.at) || ordered(a.id, b.id);
+  const engine = FSRS.fsrs({
+    request_retention: 0.9, maximum_interval: 36500, enable_fuzz: false,
+    enable_short_term: true, learning_steps: ['1m', '10m'], relearning_steps: ['10m']
+  });
+
+  function iso(value, label = '时间') {
+    let time;
+    if (Object.prototype.toString.call(value) === '[object Date]') {
+      time = Date.prototype.getTime.call(value);
+    } else if (typeof value === 'string') {
+      const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+      if (!parts) fail(label + '必须为有效的完整日期时间。');
+      const [year, month, day, hour, minute, second] = parts.slice(1, 7).map(Number);
+      const calendar = new Date(Date.UTC(year, month - 1, day));
+      if (year < 1970 || calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
+          calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
+          (parts[8] !== 'Z' && (Number(parts[8].slice(1, 3)) > 23 || Number(parts[8].slice(4)) > 59))) {
+        fail(label + '不合法。');
+      }
+      time = Date.parse(value);
+    }
+    if (!Number.isFinite(time) || time < 0 || time > 253402300799999) fail(label + '不合法。');
+    return new Date(time).toISOString();
+  }
+  const nowISO = value => iso(value === undefined ? new Date() : value);
+  const day = value => new Date(Date.parse(iso(value)) + 8 * 3600000).toISOString().slice(0, 10);
+  function safeClone(value, stack = new Set(), depth = 0) {
+    if (depth > 15) fail('数据层级过深。');
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (Object.prototype.toString.call(value) === '[object Date]') return iso(value);
+    if (!Array.isArray(value) && !plain(value)) fail('包含无法保存的数据。');
+    if (stack.has(value)) fail('包含循环引用。');
+    if (Array.isArray(value) && value.length > MAX_LOGS) fail('记录过多。');
+    stack.add(value);
+    const result = Array.isArray(value) ? [] : {};
+    for (const key of Reflect.ownKeys(value)) {
+      if (Array.isArray(value) && key === 'length') continue;
+      if (typeof key !== 'string' || RESERVED.has(key)) fail('包含危险键名。');
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !own(descriptor, 'value')) fail('不接受动态属性。');
+      if (descriptor.value === undefined) continue;
+      result[key] = safeClone(descriptor.value, stack, depth + 1);
+    }
+    stack.delete(value);
+    return result;
+  }
+  function fields(value, allowed, required = allowed) {
+    if (!plain(value) || Object.keys(value).some(key => !allowed.includes(key)) || required.some(key => !own(value, key))) {
+      fail('备份字段不完整或包含未知字段。');
+    }
+  }
+  function text(value, label, max, optional = false) {
+    if (optional && (value === undefined || value === null)) return '';
+    if (typeof value !== 'string' || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) fail(label + '格式或长度不合法。');
+    const result = value.trim();
+    if (!optional && !result) fail(label + '不能为空。');
+    return result;
+  }
+  function unit(value) {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value !== 'string' || !/^[789][ab]-u[1-9]\d{0,2}$/.test(value)) fail('单元标识不合法。');
+    return value;
+  }
+  function mode(value = 'meaning') {
+    if (!MODES.includes(value)) fail('练习方式不合法。');
+    return value;
+  }
+  function integer(value, label, max = Number.MAX_SAFE_INTEGER) {
+    if (!Number.isSafeInteger(value) || value < 0 || value > max) fail(label + '不合法。');
+    return value;
+  }
+  function finite(value, label, min, max) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(label + '不合法。');
+    return value;
+  }
+  function spelling(value) {
+    return typeof value === 'string' ? value.normalize('NFKC').trim().toLowerCase().replace(/[‘’ʼ]/g, "'").replace(/\s+/g, ' ') : '';
+  }
+  function checkSpelling(input, word) {
+    const actual = spelling(input), expected = spelling(word);
+    return !!actual && !!expected && actual === expected;
+  }
+  function wordFields(value) {
+    if (!plain(value)) fail('词条格式不合法。');
+    const word = text(value.word, '英文词语', 160);
+    if (!/[a-z]/i.test(word) || /[<>]/.test(word)) fail('英文词语格式不合法。');
+    return {word, meaning: text(value.meaning, '词义', 600), example: text(value.example, '例句', 2000, true), unitId: unit(value.unitId)};
+  }
+  function cardID(value) {
+    if (typeof value !== 'string' || !/^(?:unit:[789][ab]-u[1-9]\d{0,2}:(?:0|[1-9]\d{0,5})|custom:[0-9a-f]{16})$/.test(value)) fail('词条身份标识不合法。');
+    return value;
+  }
+  function eventID(value) {
+    if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,199}$/.test(value) || RESERVED.has(value)) fail('事件标识不合法。');
+    return value;
+  }
+  function descriptor(value) {
+    const input = safeClone(value);
+    fields(input, ['id', 'word', 'meaning', 'example', 'unitId', 'origin'], ['id', 'word', 'meaning', 'origin']);
+    const word = wordFields(input), id = cardID(input.id);
+    if (!['curriculum', 'custom'].includes(input.origin) ||
+        (input.origin === 'curriculum' && (!word.unitId || !id.startsWith('unit:' + word.unitId + ':'))) ||
+        (input.origin === 'custom' && !id.startsWith('custom:'))) fail('词条来源与身份不匹配。');
+    return {id, ...word, origin: input.origin};
+  }
+  const schedulerKeys = ['due', 'stability', 'difficulty', 'elapsed_days', 'scheduled_days', 'learning_steps', 'reps', 'lapses', 'state', 'last_review'];
+  function schedulerDTO(value) {
+    fields(value, schedulerKeys, schedulerKeys.filter(key => key !== 'last_review'));
+    const out = {
+      due: iso(value.due, '到期时间'), stability: finite(value.stability, '稳定性', 0, 1000000),
+      difficulty: finite(value.difficulty, '难度', 0, 10), elapsed_days: integer(value.elapsed_days, '间隔天数', 3650000),
+      scheduled_days: integer(value.scheduled_days, '计划天数', 36500), learning_steps: integer(value.learning_steps, '学习步骤', 1000),
+      reps: integer(value.reps, '复习次数', MAX_LOGS), lapses: integer(value.lapses, '遗忘次数', MAX_LOGS),
+      state: integer(value.state, '卡片状态', 3), last_review: value.last_review == null ? null : iso(value.last_review, '上次复习时间')
+    };
+    if (out.lapses > out.reps || (out.reps === 0 && (out.state !== 0 || out.last_review !== null || out.stability !== 0 || out.difficulty !== 0)) ||
+        (out.reps > 0 && (out.state === 0 || !out.last_review || out.stability <= 0 || out.difficulty < 1 || out.due < out.last_review))) {
+      fail('卡片状态与复习次数不一致。');
+    }
+    return out;
+  }
+  const logKeys = ['rating', 'state', 'due', 'stability', 'difficulty', 'elapsed_days', 'last_elapsed_days', 'scheduled_days', 'learning_steps', 'review'];
+  function reviewLogDTO(value) {
+    fields(value, logKeys);
+    const result = {
+      rating: integer(value.rating, '评级', 4), state: integer(value.state, '日志状态', 3), due: iso(value.due, '日志前次时间'),
+      stability: finite(value.stability, '日志稳定性', 0, 1000000), difficulty: finite(value.difficulty, '日志难度', 0, 10),
+      elapsed_days: integer(value.elapsed_days, '日志间隔', 3650000), last_elapsed_days: integer(value.last_elapsed_days, '日志前次间隔', 3650000),
+      scheduled_days: integer(value.scheduled_days, '日志计划天数', 36500), learning_steps: integer(value.learning_steps, '日志步骤', 1000),
+      review: iso(value.review, '实际复习时间')
+    };
+    if (result.rating < 1 || result.due > result.review) fail('日志评级或时间不合法。');
+    return result;
+  }
+  function hydrate(value) {
+    const card = {...value, due: new Date(value.due)};
+    if (value.last_review) card.last_review = new Date(value.last_review);
+    else delete card.last_review;
+    return card;
+  }
+  function newSchedule(at) { return schedulerDTO(FSRS.createEmptyCard(new Date(at))); }
+  function createState() {
+    return {schemaVersion:1, schedulerPackageVersion:'5.4.2', modelVersion:'FSRS-6', migratedLegacy:false, cards:{}, logs:[]};
+  }
+  function normalizeRecord(value, id) {
+    fields(value, ['id', 'word', 'meaning', 'example', 'unitId', 'origin', 'createdAt', 'updatedAt', 'schedulers']);
+    const desc = descriptor({id:value.id, word:value.word, meaning:value.meaning, example:value.example, unitId:value.unitId, origin:value.origin});
+    if (desc.id !== id) fail('词条键与身份不一致。');
+    fields(value.schedulers, MODES);
+    const result = {...desc, createdAt:iso(value.createdAt), updatedAt:iso(value.updatedAt), schedulers:{
+      meaning:schedulerDTO(value.schedulers.meaning), spelling:schedulerDTO(value.schedulers.spelling)
+    }};
+    if (result.createdAt > result.updatedAt) fail('词条创建时间晚于更新时间。');
+    return result;
+  }
+  function normalizeLog(value) {
+    fields(value, ['id', 'cardId', 'at', 'mode', 'rating', 'answer', 'correct', 'reviewLog']);
+    const result = {
+      id:eventID(value.id), cardId:cardID(value.cardId), at:iso(value.at), mode:mode(value.mode),
+      rating:integer(value.rating, '评级', 4), answer:value.answer === null ? null : text(value.answer, '作答', 1000, true),
+      correct:value.correct, reviewLog:reviewLogDTO(value.reviewLog)
+    };
+    if (result.rating < 1 || ![true, false, null].includes(result.correct) || result.reviewLog.rating !== result.rating || result.reviewLog.review !== result.at) {
+      fail('事件与原始调度日志不一致。');
+    }
+    if (result.mode === 'spelling' && (!result.answer || result.correct === null || (!result.correct && result.rating !== 1))) fail('拼写事件缺少有效作答或评级。');
+    return result;
+  }
+  function validate(value) {
+    const input = safeClone(value);
+    fields(input, ['schemaVersion', 'schedulerPackageVersion', 'modelVersion', 'migratedLegacy', 'cards', 'logs']);
+    if (input.schemaVersion !== 1 || input.schedulerPackageVersion !== '5.4.2' || input.modelVersion !== 'FSRS-6' ||
+        typeof input.migratedLegacy !== 'boolean' || !plain(input.cards) || !Array.isArray(input.logs) ||
+        Object.keys(input.cards).length > MAX_CARDS || input.logs.length > MAX_LOGS) fail('备份版本或大小不受支持。');
+    const result = createState(); result.migratedLegacy = input.migratedLegacy;
+    const counts = new Map(), latest = new Map(), seen = new Set();
+    for (const id of Object.keys(input.cards).sort(ordered)) result.cards[cardID(id)] = normalizeRecord(input.cards[id], id);
+    for (const raw of input.logs) {
+      const log = normalizeLog(raw), card = result.cards[log.cardId];
+      if (!card || seen.has(log.id) || log.at < card.createdAt || log.at > card.updatedAt ||
+          (log.mode === 'spelling' && log.correct !== checkSpelling(log.answer, card.word))) fail('日志重复、缺少词条或时间/作答不一致。');
+      seen.add(log.id);
+      const key = log.cardId + '/' + log.mode;
+      counts.set(key, (counts.get(key) || 0) + 1);
+      latest.set(key, !latest.has(key) || latest.get(key) < log.at ? log.at : latest.get(key));
+      result.logs.push(log);
+    }
+    result.logs.sort(eventOrder);
+    for (const card of Object.values(result.cards)) for (const kind of MODES) {
+      const schedule = card.schedulers[kind], key = card.id + '/' + kind;
+      if (schedule.reps !== (counts.get(key) || 0) || schedule.last_review !== (latest.get(key) || null) ||
+          (schedule.reps === 0 && schedule.due !== card.createdAt)) fail('卡片与完整复习历史不一致。');
+    }
+    return result;
+  }
+  function normalize(value) { return value == null ? createState() : validate(value); }
+  function commit(target, source) {
+    for (const key of Object.keys(target)) delete target[key];
+    Object.assign(target, source);
+  }
+  function catalog(curriculumData) {
+    if (!plain(curriculumData) || !Array.isArray(curriculumData.units)) fail('教材目录不合法。');
+    const result = [], seen = new Set();
+    for (const section of curriculumData.units) {
+      const unitId = unit(section.id);
+      if (!unitId || !Array.isArray(section.vocabulary)) fail('教材单元不合法。');
+      for (const entry of section.vocabulary) {
+        const reviewId = integer(entry.reviewId, '永久 reviewId 身份', 999999);
+        const row = descriptor({id:'unit:' + unitId + ':' + reviewId, unitId, word:entry.word, meaning:entry.meaning, example:entry.example || '', origin:'curriculum'});
+        if (seen.has(row.id)) fail('教材 reviewId 身份重复。');
+        seen.add(row.id); result.push(row);
+      }
+    }
+    return result;
+  }
+  function compatible(a, b) {
+    return a.origin === b.origin && a.unitId === b.unitId && spelling(a.word) === spelling(b.word) &&
+      (a.origin !== 'custom' || a.meaning === b.meaning);
+  }
+  function addWords(state, words, now) {
+    const draft = validate(state), at = nowISO(now);
+    if (!Array.isArray(words) || words.length > MAX_CARDS) fail('词条批次不合法。');
+    const rows = words.map(descriptor);
+    let added = 0, existing = 0;
+    for (const row of rows) {
+      if (own(draft.cards, row.id)) {
+        if (!compatible(draft.cards[row.id], row)) fail('同一词条身份指向不同内容。');
+        existing++; continue;
+      }
+      draft.cards[row.id] = {...row, createdAt:at, updatedAt:at, schedulers:{meaning:newSchedule(at), spelling:newSchedule(at)}};
+      added++;
+    }
+    if (Object.keys(draft.cards).length > MAX_CARDS) fail('词条总数超过上限。');
+    commit(state, draft);
+    return {added, existing};
+  }
+  function customIdentity(row) {
+    const source = JSON.stringify([row.unitId, spelling(row.word), row.meaning]);
+    let a = 2166136261, b = 5381;
+    for (let i = 0; i < source.length; i++) {
+      a = Math.imul(a ^ source.charCodeAt(i), 16777619) >>> 0;
+      b = (Math.imul(b, 33) ^ source.charCodeAt(i)) >>> 0;
+    }
+    return 'custom:' + a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
+  }
+  function addCustom(state, value, now) {
+    const input = safeClone(value);
+    fields(input, ['word', 'meaning', 'example', 'unitId'], ['word', 'meaning']);
+    const row = wordFields(input), id = customIdentity(row);
+    addWords(state, [{id, ...row, origin:'custom'}], now);
+    return id;
+  }
+  function parseImport(value) {
+    if (typeof value !== 'string' || value.length > 600000) fail('导入文本过大或格式不合法。');
+    const lines = value.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim());
+    if (!lines.length || lines.length > 200) fail('每批请输入 1 至 200 行词条。');
+    return lines.map((line, index) => {
+      const parts = line.split('\t');
+      if (parts.length < 2 || parts.length > 3) fail('第 ' + (index + 1) + ' 行必须使用制表符分隔英文、词义和可选例句。');
+      const row = wordFields({word:parts[0], meaning:parts[1], example:parts[2] || ''});
+      return {word:row.word, meaning:row.meaning, example:row.example};
+    });
+  }
+  function migrateLegacy(state, legacyWordStudy, curriculumData, now) {
+    const draft = validate(state), at = nowISO(now);
+    if (draft.migratedLegacy) return {added:0};
+    const legacy = legacyWordStudy == null ? {} : safeClone(legacyWordStudy);
+    const records = plain(legacy.records) ? legacy.records : {};
+    const counts = ['remembered', 'hard', 'spellingCorrect', 'spellingWrong'];
+    const rows = catalog(curriculumData).filter(row => {
+      const record = records[row.unitId + '::' + row.id.split(':').pop()];
+      return plain(record) && counts.every(key => Number.isSafeInteger(record[key]) && record[key] >= 0) && counts.some(key => record[key] > 0);
+    });
+    const result = addWords(draft, rows, at);
+    draft.migratedLegacy = true; commit(state, draft);
+    return {added:result.added};
+  }
+  function queue(state, options = {}) {
+    const current = validate(state), at = nowISO(options.now), kind = mode(options.mode);
+    const unitId = unit(options.unitId), limit = options.limit === undefined ? 20 : integer(options.limit, '本轮上限', 1000);
+    const newLimit = options.newLimit === undefined ? 5 : integer(options.newLimit, '每日新词上限', 1000);
+    const first = new Map();
+    for (const log of current.logs) if (log.mode === kind && !first.has(log.cardId)) first.set(log.cardId, log.at);
+    const used = Array.from(first.values()).filter(time => day(time) === day(at)).length;
+    const available = Math.max(0, newLimit - used);
+    const selected = Object.values(current.cards).filter(card => !unitId || card.unitId === unitId);
+    const due = selected.filter(card => card.schedulers[kind].reps > 0 && card.schedulers[kind].due <= at)
+      .sort((a, b) => ordered(a.schedulers[kind].due, b.schedulers[kind].due) || ordered(a.id, b.id));
+    const fresh = selected.filter(card => card.schedulers[kind].reps === 0 && card.createdAt <= at)
+      .sort((a, b) => ordered(a.createdAt, b.createdAt) || ordered(a.id, b.id)).slice(0, available);
+    return due.concat(fresh).slice(0, limit).map(card => card.id);
+  }
+  function replay(card, kind, logs) {
+    let schedule = newSchedule(card.createdAt);
+    for (const log of logs) if (log.cardId === card.id && log.mode === kind) {
+      schedule = schedulerDTO(engine.next(hydrate(schedule), new Date(log.at), log.rating).card);
+    }
+    return schedule;
+  }
+  function sameEvent(a, b, includeTime = true) {
+    return a.cardId === b.cardId && a.mode === b.mode && a.rating === b.rating && a.answer === b.answer && a.correct === b.correct &&
+      (!includeTime || a.at === b.at);
+  }
+  function review(state, id, rating, now, meta = {}) {
+    const draft = validate(state), kind = mode(meta.mode), eventId = eventID(meta.eventId);
+    const card = draft.cards[cardID(id)];
+    if (!card) fail('词条尚未加入复习计划。');
+    if (!Number.isInteger(rating) || rating < 1 || rating > 4) fail('评级只能为 Again、Hard、Good 或 Easy。');
+    let answer = meta.answer == null ? null : text(meta.answer, '作答', 1000, true);
+    let correct = meta.correct == null ? null : meta.correct;
+    if (![true, false, null].includes(correct)) fail('作答结果格式不合法。');
+    if (kind === 'spelling') {
+      if (!answer) fail('请先输入拼写答案。');
+      const actual = checkSpelling(answer, card.word);
+      if (correct !== null && correct !== actual) fail('拼写结果与答案不一致。');
+      correct = actual;
+      if (!correct && rating !== 1) fail('拼写错误应使用 Again 重新学习。');
+    }
+    const candidate = {cardId:id, mode:kind, rating, answer, correct};
+    const previous = draft.logs.find(log => log.id === eventId);
+    if (previous) {
+      if (!sameEvent(previous, candidate, false)) fail('同一事件标识发生冲突，请保留当前记录。');
+      return {applied:false, card:safeClone(card), due:card.schedulers[kind].due, log:safeClone(previous)};
+    }
+    const at = nowISO(now), before = card.schedulers[kind];
+    if (at < card.createdAt || (before.last_review && at < before.last_review)) fail('复习时间早于已有记录，请检查设备时间。');
+    if (draft.logs.length >= MAX_LOGS) fail('复习记录已达到上限，请先导出备份。');
+    const outcome = engine.next(hydrate(before), new Date(at), rating);
+    const log = normalizeLog({id:eventId, ...candidate, at, reviewLog:reviewLogDTO(outcome.log)});
+    draft.logs.push(log); draft.logs.sort(eventOrder);
+    card.updatedAt = ordered(card.updatedAt, at) < 0 ? at : card.updatedAt;
+    // Equal-time events have a stable order; keep each event's original log intact.
+    card.schedulers[kind] = replay(card, kind, draft.logs);
+    commit(state, draft);
+    return {applied:true, card:safeClone(card), due:card.schedulers[kind].due, log:safeClone(log)};
+  }
+  function stats(state, now, selectedMode = 'meaning') {
+    const current = validate(state), at = nowISO(now), kind = mode(selectedMode), today = day(at);
+    const cards = Object.values(current.cards), logs = current.logs.filter(log => log.mode === kind);
+    const spellingLogs = current.logs.filter(log => log.mode === 'spelling');
+    return {
+      total:cards.length, due:cards.filter(card => card.schedulers[kind].reps > 0 && card.schedulers[kind].due <= at).length,
+      new:cards.filter(card => card.schedulers[kind].reps === 0).length,
+      reviewedToday:logs.filter(log => day(log.at) === today).length, reviewedWords:new Set(logs.map(log => log.cardId)).size,
+      spellingCorrect:spellingLogs.filter(log => log.correct).length, spellingAttempts:spellingLogs.length
+    };
+  }
+  function merge(local, remote) {
+    const left = normalize(local), right = normalize(remote), result = createState();
+    result.migratedLegacy = left.migratedLegacy || right.migratedLegacy;
+    for (const id of Array.from(new Set([...Object.keys(left.cards), ...Object.keys(right.cards)])).sort(ordered)) {
+      const a = left.cards[id], b = right.cards[id];
+      if (a && b && !compatible(a, b)) fail('同一词条身份发生内容冲突，请保留两份备份。');
+      const chosen = !a ? b : !b ? a : (ordered(a.updatedAt, b.updatedAt) || ordered(JSON.stringify(a), JSON.stringify(b))) >= 0 ? a : b;
+      const card = safeClone(chosen);
+      if (a && b) {
+        card.createdAt = a.createdAt < b.createdAt ? a.createdAt : b.createdAt;
+        card.updatedAt = a.updatedAt > b.updatedAt ? a.updatedAt : b.updatedAt;
+      }
+      result.cards[id] = card;
+    }
+    const events = new Map();
+    for (const event of left.logs.concat(right.logs)) {
+      const existing = events.get(event.id);
+      if (existing && (!sameEvent(existing, event) || JSON.stringify(existing.reviewLog) !== JSON.stringify(event.reviewLog))) {
+        fail('同一事件标识发生冲突，请保留两份备份。');
+      }
+      if (!existing) events.set(event.id, safeClone(event));
+    }
+    result.logs = Array.from(events.values()).sort(eventOrder);
+    for (const card of Object.values(result.cards)) for (const kind of MODES) card.schedulers[kind] = replay(card, kind, result.logs);
+    return validate(result);
+  }
+  return Object.freeze({createState, normalize, validate, catalog, addWords, addCustom, parseImport, migrateLegacy, queue, review, checkSpelling, stats, merge});
+});
+
+</script>
+<script data-bundled-src="exercise-data.js">
+window.ENGLISH_EXERCISES = {"groups": [{"id": "listening", "sourceCardTitle": "听力 20分", "title": "听力：认识新同学", "type": "single_choice", "relatedSection": "speaking", "relatedContent": "Meeting a New Friend 中的姓名、年龄、班级和兴趣问答；以下对话为本练习新编文本。", "instructions": "先听对话，再选出每题的唯一正确答案。可以重播。设备不能播放时，点击“查看听力文本”后继续做题。", "maxPoints": 5, "audio": {"language": "en-GB", "title": "Amy meets Tom", "contentOrigin": "本组练习新编对话", "transcriptToggleLabel": "查看听力文本", "transcriptHideLabel": "收起听力文本", "playLabel": "播放对话", "transcript": "Amy: Hello! My name is Amy. What's your name?\nTom: My name is Tom. Nice to meet you, Amy.\nAmy: Nice to meet you, too. How old are you?\nTom: I'm twelve years old.\nAmy: What class are you in?\nTom: I'm in Class 3, Grade 7.\nAmy: What do you like?\nTom: I like reading. What about you?\nAmy: I like swimming.", "speechText": "Hello! My name is Amy. What's your name? My name is Tom. Nice to meet you, Amy. Nice to meet you, too. How old are you? I'm twelve years old. What class are you in? I'm in Class three, Grade seven. What do you like? I like reading. What about you? I like swimming.", "turns": [{"speaker": "Amy", "text": "Hello! My name is Amy. What's your name?"}, {"speaker": "Tom", "text": "My name is Tom. Nice to meet you, Amy."}, {"speaker": "Amy", "text": "Nice to meet you, too. How old are you?"}, {"speaker": "Tom", "text": "I'm twelve years old."}, {"speaker": "Amy", "text": "What class are you in?"}, {"speaker": "Tom", "text": "I'm in Class three, Grade seven."}, {"speaker": "Amy", "text": "What do you like?"}, {"speaker": "Tom", "text": "I like reading. What about you?"}, {"speaker": "Amy", "text": "I like swimming."}], "playbackNote": "如使用设备语音合成，应明确标为“设备朗读”；不同设备的音色与可用语音不同。显示说话人标签，朗读时不必读出标签。", "resultModePolicy": {"transcriptViewedInitialValue": false, "markViewedWhenTranscriptOpened": true, "keepViewedFlagWhenTranscriptHidden": true, "normalResultMode": "listening", "normalResultLabel": "听力练习", "afterTranscriptViewedResultMode": "transcript_assisted", "afterTranscriptViewedResultLabel": "听力材料阅读辅助练习", "afterTranscriptViewedHint": "本次查看过听力文本，答题结果按阅读辅助练习记录，不计作纯听力成绩。", "storeModeWithAttempt": true, "resetViewedFlagOnlyOnNewAttempt": true}}, "questions": [{"id": "listening_01", "prompt": "与 Amy 交谈的新同学叫什么名字？", "options": ["Lily", "Tom", "Ben", "Jack"], "correctIndex": 1, "explanation": "新同学说“My name is Tom.”，因此他的名字是 Tom。注意区分 Amy 的姓名和她正在询问的人的姓名。", "evidence": "Tom: My name is Tom. Nice to meet you, Amy.", "skill": "听取姓名"}, {"id": "listening_02", "prompt": "Tom 多大了？", "options": ["Ten years old.", "Eleven years old.", "Twelve years old.", "Thirteen years old."], "correctIndex": 2, "explanation": "Tom 回答“I'm twelve years old.”，意思是“我十二岁”。本题要听取 How old 引出的年龄信息。", "evidence": "Tom: I'm twelve years old.", "skill": "听取年龄"}, {"id": "listening_03", "prompt": "Tom 在几班？", "options": ["Class 3", "Class 2", "Class 7", "Class 1"], "correctIndex": 0, "explanation": "Tom 说“I'm in Class 3, Grade 7.”。Class 3 表示三班，Grade 7 表示七年级。题目问的是班级。", "evidence": "Tom: I'm in Class 3, Grade 7.", "skill": "区分班级和年级"}, {"id": "listening_04", "prompt": "Tom 在几年级？", "options": ["Grade 3", "Grade 6", "Grade 8", "Grade 7"], "correctIndex": 3, "explanation": "对话中 Tom 说自己在“Class 3, Grade 7”，因此他在七年级。Grade 后面的数字表示年级。", "evidence": "Tom: I'm in Class 3, Grade 7.", "skill": "听取年级"}, {"id": "listening_05", "prompt": "Tom 喜欢什么活动？", "options": ["Swimming.", "Reading.", "Running.", "Singing."], "correctIndex": 1, "explanation": "Tom 说“I like reading.”，所以他喜欢阅读。喜欢游泳的是 Amy，要留意每句话是谁说的。", "evidence": "Tom: I like reading. What about you? / Amy: I like swimming.", "skill": "听取兴趣并区分说话人"}]}, {"id": "vocabulary", "sourceCardTitle": "词汇 20分", "title": "词汇：校园与新同学", "type": "single_choice", "relatedSection": "course", "relatedContent": "课程的 student、classmate、grade、friendly、nervous 五个重点词汇。", "instructions": "根据中文意思或句子语境，选出唯一正确的选项。", "maxPoints": 5, "questions": [{"id": "vocabulary_01", "prompt": "哪一个英文单词表示“学生”？", "options": ["teacher", "friend", "school", "student"], "correctIndex": 3, "explanation": "student 表示“学生”。teacher 是“教师”，school 是“学校”，friend 是“朋友”。例句：I am a student.（我是一名学生。）", "skill": "student 的词义"}, {"id": "vocabulary_02", "prompt": "根据语境填空：Amy and Lily are in the same class. Amy is Lily's ___.", "options": ["classmate", "floor", "school", "day"], "correctIndex": 0, "explanation": "in the same class 表示“在同一个班”。因此 Amy 是 Lily 的同班同学，应用 classmate。", "skill": "classmate 的语境使用"}, {"id": "vocabulary_03", "prompt": "“我在七年级。”应写为：I am in ___ 7.", "options": ["Age", "Grade", "Name", "Day"], "correctIndex": 1, "explanation": "grade 表示“年级”，Grade 7 表示“七年级”。完整句子是“I am in Grade 7.”。", "skill": "grade 的词义与搭配"}, {"id": "vocabulary_04", "prompt": "“我的新同学很友好。”应写为：My new classmate is ___.", "options": ["nervous", "twelve", "friendly", "second"], "correctIndex": 2, "explanation": "friendly 表示“友好的”，与题目给出的中文意思相符。nervous 表示“紧张的”。", "skill": "friendly 的词义"}, {"id": "vocabulary_05", "prompt": "选出表示“紧张的”的正确拼写。", "options": ["nervuos", "nervous", "nervouse", "nerveous"], "correctIndex": 1, "explanation": "正确拼写是 nervous，字母顺序为 n-e-r-v-o-u-s。阅读原文中的 I feel a little nervous. 表示“我感觉有一点紧张”。", "skill": "nervous 的拼写"}]}, {"id": "grammar", "sourceCardTitle": "语法 20分", "title": "语法：am、is、are", "type": "single_choice", "relatedSection": "course", "relatedContent": "Grammar Lab 与核心句型 I am、you are、he/she is，以及 We are classmates.（我们是同班同学。）", "instructions": "根据主语选择合适的 be 动词，或选出结构完整且语法正确的句子。", "maxPoints": 5, "questions": [{"id": "grammar_01", "prompt": "选择正确的单词：I ___ a student.", "options": ["is", "am", "are", "be"], "correctIndex": 1, "explanation": "一般现在时中，主语 I 与 am 搭配。完整句子是 I am a student.（我是一名学生。）", "skill": "I am"}, {"id": "grammar_02", "prompt": "选择正确的单词：She ___ twelve years old.", "options": ["am", "are", "is", "be"], "correctIndex": 2, "explanation": "主语 She 是第三人称单数，应用 is。She is twelve years old. 表示“她十二岁”。", "skill": "she is"}, {"id": "grammar_03", "prompt": "选择正确的单词：You ___ my classmate.", "options": ["are", "is", "am", "be"], "correctIndex": 0, "explanation": "一般现在时中，you 与 are 搭配。You are my classmate. 表示“你是我的同班同学”。", "skill": "you are"}, {"id": "grammar_04", "prompt": "选择正确的单词：Amy and I ___ in Grade 7.", "options": ["is", "am", "be", "are"], "correctIndex": 3, "explanation": "Amy and I 指 Amy 和我两个人，相当于 we，应用 are。不能因为主语中出现 I 就选择 am。", "skill": "复数主语与 are"}, {"id": "grammar_05", "prompt": "选择结构完整且语法正确的一句自我介绍。", "options": ["I name is Amy.", "My name Amy.", "My name is Amy.", "My name are Amy."], "correctIndex": 2, "explanation": "My name is Amy. 表示“我的名字是 Amy”。name 前要用 my 表示“我的”；主语 My name 是单数，后面用 is。My name Amy. 缺少谓语动词。", "skill": "完整的姓名介绍句"}]}, {"id": "reading", "sourceCardTitle": "阅读 20分", "title": "阅读：A New School Day", "type": "single_choice", "relatedSection": "reading", "relatedContent": "沿用原型中的 A New School Day 原文，仅去除 HTML 标记并整理空白。", "instructions": "阅读短文，在原文中寻找依据，再选出每题的唯一正确答案。", "maxPoints": 5, "passageTitle": "A New School Day", "passage": "Hello! My name is Lily. I am twelve years old. Today is my first day at Sunshine Middle School. My classroom is on the second floor. It is clean and bright. My new classmate Amy sits beside me. She is friendly and often smiles at me. At first, I feel a little nervous. After talking with Amy and Miss Green, I feel much better. I think my new school life will be wonderful.", "glossary": [{"word": "bright", "meaning": "明亮的"}, {"word": "friendly", "meaning": "友好的"}, {"word": "nervous", "meaning": "紧张的"}], "questions": [{"id": "reading_01", "prompt": "How old is Lily?（Lily 多大了？）", "options": ["Twelve years old.", "Eleven years old.", "Thirteen years old.", "Fourteen years old."], "correctIndex": 0, "explanation": "原文开头 Lily 说“I am twelve years old.”，所以她十二岁。", "evidence": "I am twelve years old.", "skill": "定位年龄信息"}, {"id": "reading_02", "prompt": "Where is Lily's classroom?（Lily 的教室在哪里？）", "options": ["On the first floor.", "On the third floor.", "On the second floor.", "On the fourth floor."], "correctIndex": 2, "explanation": "原文写道“My classroom is on the second floor.”。the second floor 表示二楼。", "evidence": "My classroom is on the second floor.", "skill": "定位地点信息"}, {"id": "reading_03", "prompt": "Which word describes Amy in the passage?（原文用哪个词描述 Amy？）", "options": ["Angry.", "Friendly.", "Sad.", "Tired."], "correctIndex": 1, "explanation": "紧接介绍 Amy 的句子，原文写道“She is friendly and often smiles at me.”。这里的 She 指 Amy，因此答案是 Friendly。", "evidence": "My new classmate Amy sits beside me. She is friendly and often smiles at me.", "skill": "识别人称指代与人物特点"}, {"id": "reading_04", "prompt": "How does Lily feel at first?（Lily 起初有什么感受？）", "options": ["Very angry.", "Very tired.", "Very hungry.", "A little nervous."], "correctIndex": 3, "explanation": "at first 表示“起初”。原文明确说“At first, I feel a little nervous.”，因此 Lily 起初有一点紧张。", "evidence": "At first, I feel a little nervous.", "skill": "定位起初的情绪"}, {"id": "reading_05", "prompt": "Why does Lily feel better later?（根据短文，Lily 后来为什么感觉好多了？）", "options": ["She goes home.", "She talks with Amy and Miss Green.", "She moves to a new classroom.", "She reads a book alone."], "correctIndex": 1, "explanation": "原文写道“After talking with Amy and Miss Green, I feel much better.”，说明与 Amy 和 Miss Green 交谈后，她的心情变好了。其余三个行为没有在文中出现。", "evidence": "After talking with Amy and Miss Green, I feel much better.", "skill": "根据上下文理解情绪变化的原因"}]}, {"id": "writing", "sourceCardTitle": "写作 20分", "title": "写作：5—8句自我介绍", "type": "self_check", "relatedSection": "speaking", "relatedContent": "原型的30秒自我介绍框架与今日表达任务。", "instructions": "写5—8句英文介绍自己，包括姓名、年龄、班级或年级以及兴趣。可以采用真实或虚构的个人信息。完成后逐项自查；本任务不自动判分。", "inputPlaceholder": "My name is ...\nI am ... years old.\nI am in Class ..., Grade 7.\nI like ...\n继续写1—4句，完成你的介绍。", "automaticScoring": false, "completionLabel": "已完成 {checked} / {total} 项自查", "completionNote": "自查完成情况由你勾选记录；这不是作文得分，也不是系统对语法、发音或写作能力的评价。", "checklist": [{"id": "writing_check_01", "label": "我写了5—8句英文，每句都表达清楚的意思。", "help": "把每句话单独读一遍，检查是否写成完整表达。单独列出姓名或几个单词，不等于完成一句介绍。", "example": "My name is Lily."}, {"id": "writing_check_02", "label": "我介绍了姓名、年龄以及班级或年级。", "help": "检查读者是否能够找到这些信息。年龄可用“I am ... years old.”，班级和年级可用“I am in Class ..., Grade 7.”。", "example": "I am twelve years old. I am in Class 2, Grade 7."}, {"id": "writing_check_03", "label": "我至少用一句话介绍了自己的兴趣。", "help": "使用自己会说的表达，例如“I like reading.”或“I like English.”。如果能够解释原因，可以另外补充一句。", "example": "I like reading."}, {"id": "writing_check_04", "label": "我检查了 am、is、are 是否与主语搭配。", "help": "检查 I am、my name is、he/she is、you/we/they are。以 I like ... 表示兴趣时，不要在 I 与 like 之间添加 am。", "example": "I am twelve years old. My new classmates are friendly."}, {"id": "writing_check_05", "label": "我检查了首字母大写、I 大写和句末标点，并朗读了一遍。", "help": "注意姓名、句首单词和单独的 I 要大写。朗读时如果某句话表达不清楚，可以参照课程句型修改，或请老师、同伴帮助检查。", "example": "My name is Lily. I like reading."}], "modelLabel": "参考表达（六句；请换成你想介绍的信息）", "modelText": "My name is Lily.\nI am twelve years old.\nI am in Class 2, Grade 7.\nI like reading.\nMy new classmates are friendly.\nI am happy at my new school."}], "report": {"id": "growth", "sourceCardTitle": "学习报告", "title": "学习记录", "type": "navigation", "targetSection": "growth", "buttonLabel": "查看我的学习记录", "description": "查看本浏览器保存的答题结果、错题与写作自查进度。", "emptyState": "还没有练习记录。完成一组练习后，这里会显示你的实际作答结果。", "allowedMetrics": ["实际完成的练习组数", "每组实际答对题数与总题数", "作答时间", "实际错题及其知识点", "写作自查完成项数", "听力是否查看过文本"], "resultRules": ["没有真实作答数据时显示空状态。", "复习建议可依据错题的 skill 字段，展示相应解析和关联课程。", "纯听力与查看过文本的阅读辅助练习分别标注，不将后者计作纯听力成绩。", "写作只展示文本与自查进度，不生成作文得分或能力等级。", "不根据这20道基础题生成未验证的整体能力分、考试命中率或下一周个性化训练成效。"]}};
+
+</script>
+<script>
+
+  const OFFLINE_AUDIO = {};
+  const AUDIO_TEXT = {"audio/unit1_intro.mp3":"Hello! My name is Amy. What's your name? My name is Daniel. Nice to meet you. Nice to meet you too.","audio/word_student.mp3":"Student. I am a student.","audio/word_classmate.mp3":"Classmate. Amy is my classmate.","audio/word_grade.mp3":"Grade. I am in Grade Seven.","audio/word_friendly.mp3":"Friendly. My new classmate is friendly.","audio/word_nervous.mp3":"Nervous. At first, I feel a little nervous.","audio/reading_full.mp3":"Hello! My name is Lily. I am twelve years old. Today is my first day at Sunshine Middle School. My classroom is on the second floor. It is clean and bright. My new classmate Amy sits beside me. She is friendly and often smiles at me. At first, I feel a little nervous. After talking with Amy and Miss Green, I feel much better. I think my new school life will be wonderful.","audio/dialogue_full.mp3":"Hi! My name is Amy. What's your name? My name is Daniel. Nice to meet you, Daniel. Nice to meet you too. How old are you? I'm twelve years old. What about you? I'm twelve too. Are you in Class One? Yes, I am. Great! We are classmates.","audio/dialogue_q1.mp3":"Hello! Nice to meet you. What's your name?","audio/dialogue_q2.mp3":"Nice to meet you, Daniel. How old are you?","audio/dialogue_q3.mp3":"Great! Which class are you in?","audio/dialogue_q4.mp3":"Wonderful! We are ready for the new school day.","audio/self_intro.mp3":"Hello! My name is Daniel. I am twelve years old. I am in Class One, Grade Seven. I like reading because it is interesting. Nice to meet you.","audio/sentence_name.mp3":"What's your name?","audio/sentence_meet.mp3":"Nice to meet you.","audio/sentence_age.mp3":"How old are you?","audio/sentence_twelve.mp3":"I'm twelve years old.","audio/sentence_classmates.mp3":"We are classmates."};
+  const AUDIO_SEGMENTS = {"audio/unit1_intro.mp3":["Hello!","My name is Amy.","What's your name?","My name is Daniel.","Nice to meet you.","Nice to meet you, too."],"audio/word_student.mp3":["Student.","I am a student."],"audio/word_classmate.mp3":["Classmate.","Amy is my classmate."],"audio/word_grade.mp3":["Grade.","I am in Grade Seven."],"audio/word_friendly.mp3":["Friendly.","My new classmate is friendly."],"audio/word_nervous.mp3":["Nervous.","At first, I feel a little nervous."],"audio/reading_full.mp3":["Hello!","My name is Lily.","I am twelve years old.","Today is my first day at Sunshine Middle School.","My classroom is on the second floor.","It is clean and bright.","My new classmate, Amy, sits beside me.","She is friendly and often smiles at me.","At first, I feel a little nervous.","After talking with Amy and Miss Green, I feel much better.","I think my new school life will be wonderful."],"audio/dialogue_full.mp3":["Hi! My name is Amy.","What's your name?","My name is Daniel.","Nice to meet you, Daniel.","Nice to meet you, too.","How old are you?","I am twelve years old.","What about you?","I am twelve, too.","Are you in Class One?","Yes, I am.","Great! We are classmates."],"audio/dialogue_q1.mp3":["Hello!","Nice to meet you.","What's your name?"],"audio/dialogue_q2.mp3":["Nice to meet you, Daniel.","How old are you?"],"audio/dialogue_q3.mp3":["Great!","Which class are you in?"],"audio/dialogue_q4.mp3":["Wonderful!","We are ready for the new school day."],"audio/self_intro.mp3":["Hello!","My name is Daniel.","I am twelve years old.","I am in Class One, Grade Seven.","I like reading because it is interesting.","Nice to meet you."],"audio/sentence_name.mp3":["What's your name?"],"audio/sentence_meet.mp3":["Nice to meet you."],"audio/sentence_age.mp3":["How old are you?"],"audio/sentence_twelve.mp3":["I am twelve years old."],"audio/sentence_classmates.mp3":["We are classmates."]};
+  const PRONUNCIATION_LEXICON = [{"key":"student","text":"student","ipa":"/ˈstjuːdənt/","note":"首音节重读；英式含 /j/ 音"},{"key":"classmate","text":"classmate","ipa":"/ˈklɑːsmeɪt/","note":"首音节重读；不要漏掉末尾 /t/"},{"key":"grade","text":"grade","ipa":"/ɡreɪd/","note":"双元音 /eɪ/，末尾 /d/ 要清楚"},{"key":"friendly","text":"friendly","ipa":"/ˈfrendli/","note":"两个音节，重音在第一音节"},{"key":"nervous","text":"nervous","ipa":"/ˈnɜːvəs/","note":"重音在第一音节，第二音节弱读"},{"key":"twelve","text":"twelve","ipa":"/twelv/","note":"不要在 /l/ 与 /v/ 之间加元音"},{"key":"years","text":"years","ipa":"/jɪəz/","note":"英式为一个连续音节"},{"key":"Amy","text":"Amy","ipa":"/ˈeɪmi/","note":"首音节重读"},{"key":"Daniel","text":"Daniel","ipa":"/ˈdænjəl/","note":"常见读法为两个音节；不要逐字母拼读"},{"key":"Lily","text":"Lily","ipa":"/ˈlɪli/","note":"两个音节，两个元音都短"},{"key":"Sunshine","text":"Sunshine","ipa":"/ˈsʌnʃaɪn/","note":"首音节重读"},{"key":"middle school","text":"middle school","ipa":"/ˌmɪdəl ˈskuːl/","note":"主要重音落在 school"},{"key":"What's your name?","text":"What's your name?","ipa":"/wɒts jə ˈneɪm/","note":"特殊疑问句通常降调"},{"key":"Nice to meet you.","text":"Nice to meet you.","ipa":"/naɪs tə ˈmiːt juː/","note":"to 弱读 /tə/，重音在 meet"}];
+
+
+
+  const safeStore = {
+    get(key, fallback='') {
+      try {
+        const value = window.localStorage.getItem(key);
+        return value === null ? fallback : value;
+      } catch (e) {
+        return fallback;
+      }
+    },
+    set(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+        window.dispatchEvent(new CustomEvent('learning:stored',{detail:{key}}));
+        return true;
+      } catch (e) {
+        window.learningStorageFailed=true;
+        const warning=document.getElementById("storageWarning"); if(warning) warning.hidden=false;
+        return false;
+      }
+    },
+    remove(key) {
+      try {
+        window.localStorage.removeItem(key);
+        return true;
+      } catch (e) {
+        window.learningStorageFailed=true;
+        const warning=document.getElementById("storageWarning"); if(warning) warning.hidden=false;
+        return false;
+      }
+    }
+  };
+  const views = document.querySelectorAll('.view');
+  const navButtons = document.querySelectorAll('[data-view]');
+  const goButtons = document.querySelectorAll('[data-go]');
+  let saved = {}; try { saved = JSON.parse(safeStore.get('englishGrowthTasks','{}') || '{}'); } catch(e) { saved = {}; }
+  if(!saved || typeof saved!=='object' || Array.isArray(saved)) saved={};
+  if(saved._date && saved._date!==EnglishCore.dayKey()) saved={_date:EnglishCore.dayKey()};
+  saved._date=EnglishCore.dayKey();
+
+  function openView(id){
+    if(!Array.from(views).some(v => v.id === id)) return;
+    if(location.hash !== '#'+id) history.pushState(null,'','#'+id);
+    if(typeof betaTrackView==='function') betaTrackView(id);
+    if(id==='offline' || id==='home'){
+      // Move the live card, including its verified state and existing handlers.
+      // The portable build replaces that same card with its file-specific guidance.
+      const slot=document.getElementById(id==='offline'?'offlineRouteSlot':'offlineHomeSlot');
+      const panel=document.getElementById('distributionTitle')?.closest('.distribution-card');
+      if(slot && panel && panel.parentNode!==slot)slot.append(panel);
+      if(id==='offline'){
+        const title=document.getElementById('offlinePageTitle');
+        title.textContent=document.querySelector('meta[name="distribution"][content="offline"]')?'独立学习文件':'手机离线准备';
+      }
+    }
+    views.forEach(v => v.classList.toggle('active', v.id === id));
+    navButtons.forEach(b => b.classList.toggle('active', b.dataset.view === id));
+    window.scrollTo({top:0,behavior:'instant'});
+    if(id==='offline')document.getElementById('offlinePageTitle').focus({preventScroll:true});
+    if(id==='readwrite' && window.RWApp)window.RWApp.render();
+    if(id==='growth' && window.RWStore)renderReadWriteGrowth();
+  }
+  navButtons.forEach(btn => btn.addEventListener('click',()=>openView(btn.dataset.view)));
+  goButtons.forEach(btn => btn.addEventListener('click',(e)=>{e.preventDefault();openView(btn.dataset.go)}));
+
+  function showToast(message){
+    if(window.learningStorageFailed && /已保存|已生成|已完成|已重置|已清空/.test(message)) message='记录尚未保存。请保留此页，先导出备份。';
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.style.opacity = 1;
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    clearTimeout(window.toastTimer);
+    window.toastTimer = setTimeout(()=>{
+      toast.style.opacity = 0;
+      toast.style.transform = 'translateX(-50%) translateY(30px)';
+    },2200);
+  }
+  window.showToast = showToast;
+
+  const taskBoxes = [...document.querySelectorAll('[data-task]')];
+  taskBoxes.forEach(box=>{
+    box.checked = !!saved[box.dataset.task];
+    box.closest('.task').classList.toggle('completed',box.checked);
+    box.addEventListener('change',()=>{
+      saved[box.dataset.task] = box.checked;
+      safeStore.set('englishGrowthTasks',JSON.stringify(saved));
+      box.closest('.task').classList.toggle('completed',box.checked);
+      updateProgress();
+      if(typeof syncHomeTasks==='function') syncHomeTasks();
+      if(typeof betaTra{% endraw %}

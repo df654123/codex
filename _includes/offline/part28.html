@@ -1,0 +1,42 @@
+{% raw %}ompt = installPrompt;installPrompt = null;$('offlineInstall').hidden = true;
+    try {await prompt.prompt();} catch (_) {}
+  });
+  window.addEventListener('appinstalled', () => {$('offlineInstall').hidden = true;});
+  if (!supported) {
+    status.textContent = '当前浏览器暂不支持保存离线入口';
+    detail.textContent = '仍可直接学习。手机可换用支持的 HTTPS 浏览器入口；电脑可使用下方独立学习文件。学校局域网可使用完整包。';
+    render();return;
+  }
+  window.addEventListener('learning:ready', () => {learningReady = true;return prepareAutomatically();});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {refresh().catch(showError);});
+  navigator.serviceWorker.getRegistration(scope.href).then(reg => {
+    if (reg && [reg.active, reg.waiting, reg.installing].some(owned)) {registration = reg;observe(reg);}
+    return refresh();
+  }).catch(showError).finally(() => {startupChecked = true;return prepareAutomatically();});
+  render();
+})();
+
+</script>
+<script>
+  function followLearningHistory(){
+    const id=location.hash.slice(1), target=document.getElementById(id);
+    if(target && target.classList.contains('view') && !target.classList.contains('active')) openView(id);
+  }
+  window.addEventListener('popstate',followLearningHistory);
+  window.addEventListener('hashchange',followLearningHistory);
+  document.getElementById('mobileBackupEntry').addEventListener('click',function(){
+    var panel=document.getElementById('backupManagement');panel.scrollIntoView({block:'start',behavior:'instant'});panel.focus({preventScroll:true});
+  });
+  function renderReadWriteGrowth(){
+    const records=Object.values(RWStore.snapshot().records), el=document.getElementById('rwGrowthStats');
+    if(el)el.textContent=records.length?`已核对阅读 ${records.filter(r=>r.reviewed).length} 套 · 有初稿 ${records.filter(r=>r.draft.trim()).length} 套 · 有修改稿 ${records.filter(r=>r.revision.trim()).length} 套。可回到对应册别继续。`:'还没有专项学习记录。先选一套适合自己年级的练习。';
+  }
+  document.querySelectorAll('[data-rw-recommend]').forEach(button=>button.addEventListener('click',()=>RWApp.open('rw-8b','writing')));
+  if(document.getElementById('readwrite').classList.contains('active') && window.RWApp)RWApp.render();
+  if(document.getElementById('growth').classList.contains('active') && window.RWStore)renderReadWriteGrowth();
+  renderRestoredLiteracyConflicts();
+  window.LearningStartup.complete();
+</script>
+</body>
+</html>
+{% endraw %}

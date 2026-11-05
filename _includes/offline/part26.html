@@ -1,0 +1,453 @@
+{% raw %}s[k]===own.lastSubmission.fields[k] && own.checks[k]===own.lastSubmission.checks[k]);
+      const submitted = [own.submittedAt,remote.submittedAt].includes(own.lastSubmission?.submittedAt);
+      own.submittedAt = sameSubmission && submitted && !revoked && !conflicts.some(c=>c.unitId===id) ? own.lastSubmission.submittedAt : null;
+    }
+    validate(result);
+    return {state:result,conflicts};
+  }
+  function wordCount(text) { return (String(text).match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || []).length; }
+  const api = {createState,normalize,validate,updateField,setCheck,submit,merge,reconcile,wordCount,fields:Object.freeze(FIELDS.slice())};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.LiteracyCore = api;
+})(typeof window === 'undefined' ? globalThis : window);
+
+</script>
+<script data-bundled-src="literacy-app.js">
+(function () {
+  'use strict';
+  const C = window.LiteracyCore, D = window.ENGLISH_LITERACY, curriculum = window.Curriculum;
+  const $ = id => document.getElementById(id), host = $('literacyRoot');
+  if (!C || !D?.tasks || !curriculum || !host) return;
+  const esc = escapeHtml, key = 'englishLiteracyV40', copy = value => JSON.parse(JSON.stringify(value));
+  const tasks = new Map(D.tasks.map(t => [t.unitId,t]));
+  const units = new Map((window.ENGLISH_CURRICULUM?.units || []).map(u => [u.id,u]));
+  const books = new Map((window.ENGLISH_CURRICULUM?.books || []).map(b => [b.id,b]));
+  const labels = {evidence:'文本证据与推断',expression:'面向受众的表达作品',comparison:'文化／观点比较',reflection:'调整与学习反思'};
+  const dirty = new Set();
+  let state = C.createState(), renderedId = '', saving = false, notice = '', loadNotice = '';
+  let recoveryRaw = null, exportedRecovery = null;
+  const edits = {}, conflicts = new Map();
+  function protectOriginal(raw) {
+    if (recoveryRaw !== raw) { recoveryRaw = raw; exportedRecovery = null; }
+    loadNotice = '旧记录无法完整读取，已暂停自动写入以保留原始内容。';
+  }
+  const initialRaw = safeStore.get(key,null);
+  if (initialRaw !== null) {
+    try {
+      const parsed = JSON.parse(initialRaw);
+      try { C.validate(parsed); } catch { protectOriginal(initialRaw); }
+      state = C.normalize(parsed);
+    } catch { protectOriginal(initialRaw); }
+  }
+  let baseline = copy(state);
+  const current = () => curriculum.unit();
+  const task = () => tasks.get(current()?.id);
+  const now = () => new Date().toISOString();
+  const date = iso => iso ? new Date(iso).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})+'（北京时间）' : '尚未提交';
+  const unitLabel = u => `${books.get(u?.bookId)?.title || u?.bookId || ''} · Unit ${u?.number || ''} · ${u?.title || ''}`;
+  const draft = id => state.records[id] || {fields:Object.fromEntries(C.fields.map(k=>[k,''])),checks:Object.fromEntries(C.fields.map(k=>[k,false])),submittedAt:null,lastSubmission:null};
+  const button = (text,action,value='',css='outline-btn') => `<button type="button" class="${css}" data-lit-action="${action}" data-unit-id="${esc(renderedId)}" data-value="${esc(value)}">${esc(text)}</button>`;
+
+  function markEdit(id,field) {
+    if (!edits[id]) edits[id] = {};
+    if (!edits[id][field]) edits[id][field] = {text:draft(id).fields[field],check:draft(id).checks[field]};
+  }
+  function trackPending() {
+    dirty.clear();
+    for (const [id,r] of Object.entries(state.records)) if (JSON.stringify(r)!==JSON.stringify(baseline.records[id])) dirty.add(id);
+    for (const conflict of conflicts.values()) dirty.add(conflict.unitId);
+  }
+  function receiveSaved(fallback,previousRaw) {
+    // A competing write may have removed a unit carried by event.newValue.
+    // Merge the event first, then the currently stored snapshot, instead of
+    // choosing one. The same baseline is used for both three-way merges so the
+    // second read cannot erase a contribution recovered from the event.
+    const observed = safeStore.get(key,null), before = copy(baseline);
+    let eventBefore = before;
+    if (previousRaw === null) eventBefore = C.createState();
+    else if (typeof previousRaw === 'string') {
+      try { const parsed=JSON.parse(previousRaw);C.validate(parsed);eventBefore=C.normalize(parsed); } catch { /* An unreadable old event cannot be a trustworthy baseline. */ }
+    }
+    for (const [raw,isStored] of [[fallback,false],[observed,true]]) {
+      if (raw === null || raw === undefined) { if (isStored) baseline=C.createState(); continue; }
+      let incoming;
+      try {
+        incoming = JSON.parse(raw); C.validate(incoming);
+        const merged = C.reconcile(state,incoming,isStored?before:eventBefore,edits);
+        state = merged.state;
+        for (const conflict of merged.conflicts) {
+          const name=conflict.unitId+':'+conflict.field;
+          // Reconcile already excludes unchanged baseline fields. A genuine
+          // further edit, including a clear, must update the offered variant.
+          conflicts.set(name,conflict);
+        }
+        if (isStored) baseline = C.normalize(incoming);
+        if (isStored && recoveryRaw !== null && raw !== recoveryRaw) {
+          recoveryRaw = null; exportedRecovery = null; loadNotice = '';
+        }
+      } catch {
+        if (isStored) {
+          protectOriginal(raw);
+          if (incoming) state = C.merge(state,C.normalize(incoming),dirty);
+        }
+      }
+    }
+    trackPending();
+  }
+  function persist(approvedOriginal = null) {
+    if (window.restoringSnapshot || saving) return false;
+    receiveSaved();
+    if (recoveryRaw !== null && approvedOriginal !== recoveryRaw) { syncStatus(); return false; }
+    if (conflicts.size) { syncStatus(); return false; }
+    if (!dirty.size && recoveryRaw === null) { syncStatus(); return true; }
+    saving = true;
+    let ok = false;
+    try { ok = safeStore.set(key,JSON.stringify(state)) === true; } catch { ok = false; }
+    finally { saving = false; }
+    if (ok) { baseline=copy(state); dirty.clear(); loadNotice = ''; recoveryRaw = null; exportedRecovery = null; }
+    syncStatus();
+    return ok;
+  }
+  function snapshotHTML(r) {
+    if (!r.lastSubmission) return '<p class="lit-muted">提交后，这里会保留最近一次提交的内容，供下一次修改时对照。</p>';
+    return `<details class="lit-snapshot"><summary>查看最近提交快照 · ${esc(date(r.lastSubmission.submittedAt))}</summary>${C.fields.map(field => `<h4>${labels[field]}</h4><p class="lit-preserve">${esc(r.lastSubmission.fields[field])}</p>`).join('')}<p class="lit-muted">这是当时的作品与自查快照，没有自动评分。</p></details>`;
+  }
+  function archiveHTML() {
+    const records = Object.entries(state.records).filter(([,r]) => r.lastSubmission || C.fields.some(k => r.fields[k].trim())).sort((a,b) => b[1].updatedAt.localeCompare(a[1].updatedAt));
+    if (!records.length) return '<p class="lit-muted">写下第一条依据或一句表达，就会在这里留下本单元草稿。</p>';
+    return `<ul class="lit-archive-list">${records.map(([id,r]) => `<li><div><strong>${esc(tasks.get(id)?.title || id)}</strong><small>${esc(unitLabel(units.get(id)))}</small><span class="lit-record-state">${dirty.has(id)?'本页有未保存内容':r.submittedAt?'已提交作品记录':r.lastSubmission?'修订中':'草稿'} · ${esc(date(r.submittedAt || r.updatedAt))}</span></div>${button(id===renderedId?'当前单元':'继续这个单元','open-unit',id)}</li>`).join('')}</ul>`;
+  }
+  function recoveryHTML() {
+    if (recoveryRaw === null) return '';
+    return `<div class="lit-recovery"><h4>先保护原始记录</h4><p>有些旧内容无法完整读取，自动保存已暂停。当前草稿仍可导出。请先下载原始记录并确认文件已保留，再选择恢复保存。</p><p>恢复后会写入可恢复记录和本页草稿；无法读取的部分仍保留在原始下载文件中。</p><div class="lit-actions">${button('下载原始记录','export-recovery')}${button('恢复保存当前可用记录','recover')}</div>${exportedRecovery===recoveryRaw?'<p>已发起原始文件下载，请确认文件已保留后再恢复。</p>':''}</div>`;
+  }
+  function conflictHTML() {
+    if (!conflicts.size) return '';
+    return `<div class="lit-recovery"><h4>同一栏出现了两份修改</h4><p>两版内容都已保留在本页，自动保存已暂停。请对照后选择；也可先导出本单元记录，保存两版文字。关闭页面会丢失尚未保存的本页版本。</p>${[...conflicts.entries()].map(([name,c])=>`<section><h4>${esc(tasks.get(c.unitId)?.title || c.unitId)} · ${labels[c.field]}</h4><p><strong>本页内容</strong></p><p class="lit-preserve">${esc(draft(c.unitId).fields[c.field]) || '（空白）'}</p><p><strong>另一页内容</strong></p><p class="lit-preserve">${esc(c.remote) || '（空白）'}</p><div class="lit-actions">${button('保留本页内容，替换另一版','conflict-local',name)}${button('采用另一页内容，替换本页','conflict-remote',name)}</div></section>`).join('')}</div>`;
+  }
+  function syncStatus() {
+    const r = draft(renderedId), saveStatus = $('lit-save-status'), submission = $('lit-submission-status');
+    if (saveStatus) {
+      saveStatus.textContent = recoveryRaw !== null ? '旧记录无法完整读取，原始内容已保护：暂未保存新输入，请先下载原始记录，并导出当前草稿。' : conflicts.size ? '同一栏有两份修改冲突，暂未保存；请对照并选择，或先导出本单元记录保留两版。' : dirty.size ? '暂未保存：内容仍在本页，请重试保存或立即导出；关闭页面可能丢失。' : loadNotice || (state.records[renderedId] ? '草稿已自动保存到当前浏览器。' : '输入后自动保存到当前浏览器；建议定期导出。');
+      saveStatus.dataset.state = dirty.size || recoveryRaw !== null || conflicts.size ? 'error' : 'saved';
+    }
+    if (submission) submission.textContent = dirty.size && r.submittedAt ? '这份作品仅在当前页面，尚未成功保存。' : r.submittedAt ? `作品记录提交时间：${date(r.submittedAt)}` : r.lastSubmission ? '内容或自查已修改，请重新检查后提交；上一版仍可对照。' : '完成四项内容与自查后，可提交一份作品记录。';
+    const message = $('lit-message'); if (message) message.textContent = notice;
+    const count = $('lit-word-count'); if (count) count.textContent = `${C.wordCount(r.fields.expression)} 个英文词 · 建议仅作安排参考，可以从短句开始。`;
+    for (const field of C.fields) {
+      const check = $('lit-check-'+field); if (check) check.checked = r.checks[field];
+      const input = $('lit-'+field); if (input && input.value !== r.fields[field]) input.value = r.fields[field];
+    }
+    const previous = $('lit-previous'); if (previous) previous.innerHTML = snapshotHTML(r);
+    const archive = $('lit-archive'); if (archive) archive.innerHTML = archiveHTML();
+    const recovery = $('lit-recovery'); if (recovery) recovery.innerHTML = recoveryHTML()+conflictHTML();
+  }
+  function inputHTML(field,prompt,help='') {
+    const value = draft(renderedId).fields[field];
+    return `<div class="lit-field"><label for="lit-${field}">${labels[field]}</label><p id="lit-help-${field}" class="lit-field-prompt">${esc(prompt)}</p>${help}<textarea id="lit-${field}" rows="${field==='expression'?7:4}" maxlength="20000" data-lit-field="${field}" data-unit-id="${esc(renderedId)}" aria-describedby="lit-help-${field}" placeholder="可以先写简短句子，再补充理由与细节。">${esc(value)}</textarea></div>`;
+  }
+  function refresh() {
+    if (window.restoringSnapshot) return;
+    const u = current(), t = task();
+    if (!u || !t) { host.innerHTML = '<div class="lit-panel"><h2>学以致用</h2><p>当前单元尚未配置主题任务，请从课程目录选择已开放单元。</p></div>'; return; }
+    receiveSaved(); renderedId = u.id;
+    const r = draft(u.id);
+    host.innerHTML = `<div class="lit-shell">
+      <header class="lit-heading"><div><span class="lit-kicker">USE ENGLISH · LEAVE A TRACE</span><h2>学以致用</h2><p>${esc(unitLabel(u))}</p></div><span class="lit-evidence-note">活动与自查记录，不是素养测评分数</span></header>
+      <section class="lit-brief"><span class="lit-kicker">本单元主题任务</span><h3>${esc(t.title)}</h3><p><strong>说给谁听／写给谁看：</strong>${esc(t.audience)}</p><p>${esc(t.task)}</p><div class="lit-evidence-tags" aria-label="这项任务可以留下的学习证据"><span>语言能力 · 表达作品</span><span>文化意识 · 尊重差异</span><span>思维品质 · 依据与理由</span><span>学习能力 · 调整与反思</span></div><p class="lit-muted">这些标签说明练习方向；保存作品不等于已达到某个素养等级。</p></section>
+      <div class="lit-layout"><div class="lit-work">
+      <section class="lit-panel" aria-labelledby="lit-stage-one"><div class="lit-stage"><span>01</span><div><small>学习理解</small><h3 id="lit-stage-one">读懂材料，找到依据</h3></div></div><p>回到原创短文《${esc(u.reading?.title || '')}》，区分作者写明的内容与你的推断。</p><div class="lit-actions">${button('打开本单元阅读','reading')}${button('打开本单元词汇','words')}</div>${inputHTML('evidence',t.readingPrompt)}</section>
+      <section class="lit-panel" aria-labelledby="lit-stage-two"><div class="lit-stage"><span>02</span><div><small>应用实践</small><h3 id="lit-stage-two">为具体的人表达</h3></div></div><p class="lit-word-hints">可尝试用 <strong>${t.targetWords.map(esc).join(' / ')}</strong>，也可以按意思调整或替换；不按关键词出现次数打分。</p><p class="lit-muted">本年级可参考约 ${t.wordRange.min}—${t.wordRange.max} 个英文词，起步短句也可以保存和提交，没有词数硬门槛。</p><details class="lit-starters"><summary>需要起步句架？</summary>${t.starters.map(s=>`<p lang="en">${esc(s)}</p>`).join('')}<p class="lit-muted">请按你的想法补充或修改，不必照抄。</p></details>${inputHTML('expression',t.task)}<p id="lit-word-count" class="lit-muted"></p>${button('参考本单元写作活动','writing')}${inputHTML('comparison',t.culturePrompt)}</section>
+      <section class="lit-panel" aria-labelledby="lit-stage-three"><div class="lit-stage"><span>03</span><div><small>迁移创新</small><h3 id="lit-stage-three">条件变了，怎样调整？</h3></div></div><p class="lit-transfer">${esc(t.transferPrompt)}</p>${inputHTML('reflection',t.reflectionPrompt,'<p class="lit-muted">在这一栏同时写：调整后的做法与理由，以及你准备改进的学习方法。可先用中文整理，再尝试英文。</p>')}</section>
+      <section class="lit-panel lit-submit" aria-labelledby="lit-check-title"><h3 id="lit-check-title">对照作品，逐项自查</h3><p>自查是你对本次作品的检查，不是系统评分。修改相关内容后，需要重新确认。</p><div class="lit-checks">${t.rubric.map(item=>`<label><input type="checkbox" id="lit-check-${item.id}" data-lit-check="${item.id}" data-unit-id="${esc(renderedId)}"${r.checks[item.id]?' checked':''}><span>${esc(item.label)}</span></label>`).join('')}</div><div class="lit-actions">${button('提交作品记录','submit','','primary-btn')}${button('导出本单元记录','export')}${button('重试保存','retry')}</div><p id="lit-save-status" class="lit-save-status" role="status" aria-live="polite"></p><p id="lit-submission-status" class="lit-muted"></p><p id="lit-message" class="lit-message" role="status" aria-live="polite"></p><div id="lit-recovery">${recoveryHTML()}</div><div id="lit-previous">${snapshotHTML(r)}</div></section>
+      </div><aside class="lit-panel lit-portfolio" aria-labelledby="lit-archive-title"><span class="lit-kicker">MY PRACTICE PORTFOLIO</span><h3 id="lit-archive-title">我的实践档案</h3><p class="lit-muted">各单元草稿、提交与修订保存在当前浏览器。可随时回来继续，也可导出给老师或家人讨论。</p><div id="lit-archive">${archiveHTML()}</div></aside></div>
+      <p class="lit-source-note">站内原创主题拓展任务，依据现有单元材料设计；不替代正版教材。参考《义务教育英语课程标准（2022年版）》的主题学习、学习活动观与形成性评价建议。</p></div>`;
+    syncStatus();
+  }
+  function validTarget(target) {
+    if (window.restoringSnapshot) return false;
+    if (!target?.dataset || target.dataset.unitId !== renderedId || current()?.id !== renderedId) { refresh(); return false; }
+    return true;
+  }
+  function exportCurrent() {
+    const u = current(), t = task(), r = draft(u.id);
+    const lines = ['# 学以致用 · '+t.title,'',unitLabel(u),'','活动与自查记录，不是素养测评分数。',
+      '受众：'+t.audience,'任务：'+t.task,'建议词汇：'+t.targetWords.join(' / ')+'（可自行调整）',
+      '记录状态：'+(dirty.has(u.id)?'本页有未保存内容':r.submittedAt?'已提交作品记录':'草稿／修订中'),
+      '提交时间：'+date(r.submittedAt),''];
+    for (const field of C.fields) lines.push('## '+labels[field],r.fields[field] || '（尚未填写）','');
+    lines.push('## 本次自查',...t.rubric.map(item=>`- [${r.checks[item.id]?'x':' '}] ${item.label}`),'');
+    if (r.lastSubmission) { lines.push('## 最近一次提交快照',date(r.lastSubmission.submittedAt),''); for (const field of C.fields) lines.push('### '+labels[field],r.lastSubmission.fields[field],''); }
+    for (const c of conflicts.values()) if (c.unitId===u.id) lines.push('## 尚未解决的两版修改 · '+labels[c.field],'### 本页内容',r.fields[c.field],'### 另一页内容',c.remote,'');
+    lines.push('自查反映学习者对作品的检查；此记录不自动评定核心素养或语言能力等级。');
+    downloadText(`学以致用_${u.id}_${new Date().toISOString().slice(0,10)}.md`,lines.join('\n'),'text/markdown;charset=utf-8');
+  }
+  host.addEventListener('input',event => {
+    const target = event.target, field = target?.dataset?.litField;
+    if (!C.fields.includes(field) || !validTarget(target)) return;
+    try {
+      if (draft(renderedId).fields[field] !== target.value) markEdit(renderedId,field);
+      if (C.updateField(state,renderedId,field,target.value,now())) { dirty.add(renderedId); notice = ''; persist(); }
+      syncStatus();
+    } catch (error) { notice = error.message; syncStatus(); }
+  });
+  host.addEventListener('change',event => {
+    const target = event.target, field = target?.dataset?.litCheck;
+    if (!C.fields.includes(field) || !validTarget(target)) return;
+    if (draft(renderedId).checks[field] !== !!target.checked) markEdit(renderedId,field);
+    if (C.setCheck(state,renderedId,field,!!target.checked,now())) { dirty.add(renderedId); notice = ''; persist(); }
+    syncStatus();
+  });
+  host.addEventListener('click',event => {
+    const target = event.target?.closest?.('[data-lit-action]');
+    if (!target || !host.contains(target) || !validTarget(target)) return;
+    event.preventDefault();
+    const action = target.dataset.litAction;
+    if (action === 'open-unit') { open(target.dataset.value); return; }
+    if (action === 'reading') { curriculum.openActivity({kind:'reading'}); return; }
+    if (action === 'words') { curriculum.openWords(); return; }
+    if (action === 'writing') { curriculum.openExercise('writing'); return; }
+    if (action === 'export') { exportCurrent(); return; }
+    if (action === 'conflict-local' || action === 'conflict-remote') {
+      const name=target.dataset.value, conflict=conflicts.get(name);
+      if (!conflict) return;
+      const id=conflict.unitId, field=conflict.field, chosen=action==='conflict-local'?draft(id).fields[field]:conflict.remote;
+      if (!edits[id]) edits[id]={};
+      // Explicit resolution makes the remote variant the new comparison base.
+      edits[id][field]={text:conflict.remote,check:conflict.remoteCheck};
+      C.updateField(state,id,field,chosen,now()); C.setCheck(state,id,field,false,now());
+      state.records[id].submittedAt=null; conflicts.delete(name); dirty.add(id);
+      notice=persist()?'所选内容已保存，请重新自查。':'所选内容已保留；请先解决其余冲突或导出记录。';
+      syncStatus(); return;
+    }
+    if (action === 'export-recovery') {
+      receiveSaved();
+      if (recoveryRaw !== null) {
+        try {
+          downloadText(`学以致用_原始记录_${new Date().toISOString().slice(0,10)}.txt`,recoveryRaw,'text/plain;charset=utf-8');
+          exportedRecovery = recoveryRaw; notice = '已发起原始记录下载。请确认文件已保留，再选择恢复保存。';
+        } catch { notice = '原始记录下载未能启动，仍保留在浏览器中；请勿清除网站数据。'; }
+      }
+      syncStatus(); return;
+    }
+    if (action === 'recover') {
+      receiveSaved();
+      if (recoveryRaw !== null && exportedRecovery !== recoveryRaw) notice = '请先下载并保留原始记录，再恢复保存。';
+      else notice = persist(recoveryRaw) ? '可恢复记录与当前草稿已保存。原始下载文件请继续保留。' : '恢复保存未成功，原始记录仍受保护，请导出当前草稿。';
+      syncStatus(); return;
+    }
+    if (action === 'retry') { notice = persist() ? '当前记录已保存。' : '保存仍未成功，请先导出本单元记录。'; syncStatus(); return; }
+    if (action === 'submit') {
+      try {
+        receiveSaved();
+        if (conflicts.size) throw Error('请先处理两份修改的冲突，再对照当前作品自查和提交。');
+        C.submit(state,renderedId,now()); dirty.add(renderedId);
+        notice = persist() ? '作品与自查已记录，可以继续修改并对照上一版。' : '作品尚未保存成功，请保留本页并导出记录。';
+      } catch (error) { notice = error.message; }
+      syncStatus();
+    }
+  });
+  function open(id) {
+    if (id && tasks.has(id) && current()?.id !== id) curriculum.selectUnit(id);
+    window.openView('literacy'); refresh();
+  }
+  window.Literacy = {
+    snapshot:()=>copy(state),refresh,open,
+    conflictEvidence:()=>[...conflicts.values()].map(c=>({unitId:c.unitId,field:c.field,local:draft(c.unitId).fields[c.field],remote:c.remote,base:c.base}))
+  };
+  document.addEventListener('curriculum:updated',refresh);
+  window.addEventListener('storage',event => {
+    if (event.key !== key || saving || window.restoringSnapshot) return;
+    receiveSaved(event.newValue,event.oldValue);
+    if (dirty.size && !conflicts.size && recoveryRaw === null) persist();
+    refresh();
+  });
+  const previousOpenView = window.openView;
+  if (typeof previousOpenView === 'function') window.openView = function (...args) {
+    const result = previousOpenView.apply(this,args);
+    if (args[0] === 'literacy') refresh();
+    return result;
+  };
+  refresh();
+})();
+
+</script>
+<script data-bundled-src="textbook-alignment.js">
+(function () {
+  'use strict';
+  const data = window.ENGLISH_CURRICULUM, curriculum = window.Curriculum;
+  const main = document.getElementById('mainContent');
+  if (!main || !data?.units?.length || !curriculum?.progress) return;
+  const esc = window.escapeHtml;
+  const books = new Map(data.books.map(book => [book.id, book]));
+  const topics = new Map((window.GRAMMAR_BANK?.topics || []).map(topic => [topic.id, topic]));
+  const studyViews = new Set(['today','exam','course','words','reading','speaking','assessment','growth','literacy']);
+  const stages = [
+    ['vocabulary','词汇','words'], ['grammar','语法','grammar'], ['reading','阅读','reading'],
+    ['listening','听力','listening'], ['speaking','口语','speaking'], ['writing','写作','writing']
+  ];
+  const statusLabels = {'edition-checked':'所列版本目录已核','resource-crosschecked':'新版配套资源交叉核对','legacy-reference':'旧版四单元复习'};
+  const expanded = new Set(['sections']);
+  let currentUnitId = '', updating = false;
+  const bar = document.createElement('section');
+  bar.id = 'textbookNavigator';
+  bar.className = 'ta-navigator';
+  bar.setAttribute('aria-label','当前教材与单元学习路线');
+  bar.innerHTML = `<div class="ta-nav-heading"><span class="cx-kicker">YOUR UNIT, STEP BY STEP</span><span id="taProgress" class="ta-progress-copy" role="status"></span></div>
+    <div class="ta-selectors"><label for="taBook">正在学习的教材<select id="taBook">${data.books.map(book => `<option value="${esc(book.id)}">${esc(book.shortLabel || book.title)}</option>`).join('')}</select></label><label for="taUnit" class="ta-unit-selector">当前单元<select id="taUnit"></select></label><button type="button" data-ta-action="alignment" class="ta-reference-button">教材对照与页码 <span aria-hidden="true">↗</span></button></div>
+    <nav class="ta-stages" aria-label="本单元六个学习环节">${stages.map(([kind,label,action],index) => `<button type="button" data-ta-action="${action}" data-ta-stage="${kind}"><span class="ta-stage-icon" aria-hidden="true">${index + 1}</span><span>${label}</span><small class="ta-stage-status">待完成</small></button>`).join('')}</nav>
+    <div class="ta-nav-footer"><span id="taBookStatus" class="ta-book-status"></span><button type="button" id="taNext" class="primary-btn" data-ta-action="next"></button></div>`;
+  main.prepend(bar);
+  const $ = id => document.getElementById(id);
+  const button = (label,action,value = '',css = 'ta-link') => `<button type="button" class="${css}" data-ta-action="${esc(action)}" data-ta-value="${esc(value)}">${esc(label)}</button>`;
+  const link = (label,url) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
+  const activeView = () => document.querySelector('main .view.active')?.id || '';
+
+  function nextLabel(next) {
+    if (next.kind === 'complete') return '六个环节已完成 · 看学习记录 →';
+    const label = next.kind === 'grammar' ? topics.get(next.variant)?.title || '语法练习'
+      : next.kind === 'vocabulary' ? `词汇第 ${next.variant === 'set2' ? '2' : '1'} 组`
+      : stages.find(([kind]) => kind === next.kind)?.[1] || '本单元';
+    return `继续下一步：${label} →`;
+  }
+
+  function sectionCompanion(section) {
+    const descriptions = {
+      welcome:['看教材图片与导入问题，联系自己的生活经验。', [['预习主题词汇','words']]],
+      reading:['先读教材课文，再用同主题的新短文练习理解与表达。', [['读原创配套短文','reading']]],
+      grammar:['对照教材规则与例句，完成本单元对应知识点练习。', [['看讲解与练习','grammar']]],
+      pronunciation:[`按教材练习${section.topicZh || '本单元语音'}；站内校准中心可检查设备英语语音。`, [['打开发音校准','pronunciation']]],
+      integration:['先完成教材综合活动，再用站内原创情境练听、说、写，并把主题知识用于新的任务。', [['听力','listening'],['口语','speaking'],['写作','writing'],['学以致用','literacy']]],
+      assessment:['先做教材自评，再到成长档案查看实际练习记录与错题。', [['看记录与错题','growth']]],
+      furtherStudy:['按教材线索继续查读，再选站内书目开展拓展阅读。', [['打开拓展书目','classics']]],
+      workbook:['在实书完成本单元练习；需要巩固时可加做站内原创题。', [['打开配套练习','practice']]]
+    };
+    return descriptions[section.id] || ['按教材栏目学习，再完成本单元配套活动。', [['看本单元','course']]];
+  }
+
+  function sectionGuide(reference) {
+    if (!reference.sections?.length) return `<div class="ta-no-pages"><strong>按单元主题与语法学习</strong><p>这册尚未取得可逐页核验的栏目页码。请先找到实书中的同名单元，再使用下方的语法范围与站内配套入口。</p><div class="ta-inline-actions">${button('本单元语法','grammar')}${button('原创阅读','reading')}${button('听力练习','listening')}${button('主题写作','writing')}</div></div>`;
+    return `<details class="ta-detail" data-ta-details="sections"${expanded.has('sections') ? ' open' : ''}><summary>教材栏目与学习入口 <span>${reference.sections.length} 个栏目 · 所列印次页码参考</span></summary><p class="ta-detail-note">先找到教材中的栏目，再进入对应的站内配套活动。下列页码是书上印刷页码；Workbook 位于书后附录。</p><div class="ta-section-grid">${reference.sections.map(section => {
+      const [description,actions] = sectionCompanion(section);
+      return `<article class="ta-section-card"><div class="ta-section-top"><span>${esc(section.labelZh)}</span><span class="ta-page">${section.location === 'appendix' ? '附录 ' : ''}P${esc(section.pageLabel)}</span></div><h4 lang="en">${esc(section.label)}</h4><p>${esc(description)}</p><div class="ta-inline-actions">${actions.map(([label,action]) => button(label,action)).join('')}</div></article>`;
+    }).join('')}</div></details>`;
+  }
+
+  function bookTable(book,unit) {
+    return `<details class="ta-detail" data-ta-details="book"${expanded.has('book') ? ' open' : ''}><summary>整册单元与语法对照 <span>${data.units.filter(row => row.bookId === book.id).length} 个单元 · 点标题切换</span></summary><div class="ta-table-wrap"><table class="ta-table"><caption>${esc(book.shortLabel || book.title)} · 教材范围与站内练习</caption><thead><tr><th scope="col">单元</th><th scope="col">教材语法范围</th><th scope="col">站内配套练习</th></tr></thead><tbody>${data.units.filter(row => row.bookId === book.id).map(row => `<tr${row.id === unit.id ? ' class="is-current"' : ''}><th scope="row"><button type="button" class="ta-unit-link" data-ta-action="unit" data-ta-value="${esc(row.id)}" aria-pressed="${row.id === unit.id}"><span>UNIT ${String(row.number).padStart(2,'0')}${row.id === unit.id ? ' · 当前' : ''}</span><strong lang="en">${esc(row.title)}</strong></button></th><td>${esc(row.textbook?.grammarScope || '请对照教材本单元语法页')}${row.textbook?.grammarPages?.length ? `<small>Grammar · P${row.textbook.grammarPages.join('–')}</small>` : ''}</td><td><div class="ta-topic-links">${row.grammarKeys.map(topicId => button(topics.get(topicId)?.title || topicId,'topic',`${row.id}|${topicId}`)).join('')}</div></td></tr>`).join('')}</tbody></table></div><p class="ta-detail-note">配套题为本站原创，部分知识点会分组巩固。完成记录表示已参与练习，掌握情况请结合答题结果、错题订正和老师反馈判断。</p></details>`;
+  }
+
+  function renderGuide(unit,book) {
+    const course = $('cx-course'), catalog = course?.querySelector('.cx-catalog');
+    if (!catalog) return;
+    let guide = $('textbookAlignment');
+    if (guide?.dataset.unitId === unit.id) return;
+    if (!guide) {
+      guide = document.createElement('section');
+      guide.id = 'textbookAlignment'; guide.className = 'ta-alignment';
+      guide.setAttribute('aria-labelledby','taAlignmentTitle');
+      catalog.insertAdjacentElement('afterend',guide);
+    }
+    const reference = unit.textbook || {};
+    guide.dataset.unitId = unit.id;
+    guide.innerHTML = `<header class="ta-alignment-heading"><div><span class="cx-kicker">TEXTBOOK → PRACTICE</span><h3 id="taAlignmentTitle" tabindex="-1">对照教材，学好这一单元</h3><p>${esc(book.shortLabel || book.title)} · Unit ${unit.number} <span lang="en">${esc(unit.title)}</span>${reference.unitStartPage ? ` · 单元介绍 P${reference.unitStartPage}` : ''}</p></div><span class="ta-status-badge ${reference.status === 'legacy-reference' ? 'is-reference' : ''}">${esc(statusLabels[reference.status] || '版本待核')}</span></header>
+      <div class="ta-edition-note"><strong>对照依据：${esc(reference.referenceEdition || book.editionLabel)}</strong><p>${esc(book.editionNote)}</p></div>
+      <div class="ta-current-grammar"><span>本单元教材语法</span><strong>${esc(reference.grammarScope || '请查看实书中的语法栏目')}</strong>${button('去学这一单元的语法 →','grammar')}</div>
+      ${sectionGuide(reference)}${bookTable(book,unit)}
+      <details class="ta-detail ta-sources" data-ta-details="sources"${expanded.has('sources') ? ' open' : ''}><summary>教材版本、资料来源与使用说明</summary><p>${esc(book.alignmentSummary || book.editionNote)} 站内提供主题词汇精选、原创短文和练习；课文原文、完整词表与课后原题请查阅正版教材。</p><div class="ta-source-links">${link('出版社教材与配套资源',book.officialUrl)}${link('国家中小学智慧教育平台','https://basic.smartedu.cn/elecEdu')}${book.referenceUrl ? link('本册目录及版权页核验来源（第三方扫描）',book.referenceUrl) : ''}${(data.textbookSources || []).map(source => link(source.label,source.url)).join('')}</div><p class="ta-detail-note">最近核对：${esc(data.updatedAt)}。栏目到站内活动的衔接为本站学习建议，不代表教材规定的课时安排。联网可查阅来源；本页对照资料和原创配套内容随离线版保存。</p></details>`;
+    const shortcuts = course.querySelector('.cx-course-shortcuts');
+    if (shortcuts && !shortcuts.querySelector('[data-ta-action="alignment"]')) shortcuts.insertAdjacentHTML('afterbegin',button('教材对照与页码','alignment','','outline-btn'));
+  }
+
+  function refresh() {
+    if (updating) return;
+    updating = true;
+    try {
+      const unit = curriculum.unit(), book = books.get(unit.bookId), progress = curriculum.progress(), view = activeView();
+      const changed = currentUnitId !== unit.id;
+      if (changed) {
+        currentUnitId = unit.id;
+        $('taBook').value = book.id;
+        $('taUnit').innerHTML = data.units.filter(row => row.bookId === book.id).map(row => `<option value="${esc(row.id)}"${row.id === unit.id ? ' selected' : ''}>Unit ${row.number} · ${esc(row.title)}</option>`).join('');
+        if (view === 'words') window.WordStudy?.refresh();
+        if (view === 'exam') window.ExamPath?.refresh();
+      } else {
+        $('taBook').value = book.id;
+        $('taUnit').value = unit.id;
+      }
+      const host = studyViews.has(view) ? $(view) : main;
+      if (host && bar.parentElement !== host) host.prepend(bar);
+      bar.hidden = !studyViews.has(view);
+      $('taProgress').textContent = `${progress.done} / 6 环节已完成`;
+      $('taBookStatus').textContent = statusLabels[book.alignmentStatus] || book.editionLabel;
+      $('taBookStatus').classList.toggle('is-reference',book.alignmentStatus === 'legacy-reference');
+      $('taNext').textContent = nextLabel(curriculum.nextActivity());
+      const viewKind = {words:'vocabulary',reading:'reading',speaking:'speaking'}[view];
+      bar.querySelectorAll('[data-ta-stage]').forEach((element,index) => {
+        const complete = !!progress.complete[element.dataset.taStage];
+        element.classList.toggle('is-done',complete);
+        element.querySelector('.ta-stage-icon').textContent = complete ? '✓' : String(index + 1);
+        element.querySelector('.ta-stage-status').textContent = complete ? '已完成' : '待完成';
+        if (viewKind === element.dataset.taStage) element.setAttribute('aria-current','step');
+        else element.removeAttribute('aria-current');
+      });
+      renderGuide(unit,book);
+    } finally { updating = false; }
+  }
+
+  function focusSection(id) {
+    window.openView('course');
+    const element = $(id);
+    if (!element) return;
+    element.scrollIntoView({block:'start',behavior:'instant'});
+    const heading = element.querySelector('h3') || element;
+    heading.setAttribute('tabindex','-1'); heading.focus({preventScroll:true});
+  }
+
+  document.addEventListener('change',event => {
+    if (event.target.id === 'taBook') {
+      const first = data.units.find(unit => unit.bookId === event.target.value);
+      if (first) curriculum.selectUnit(first.id);
+      refresh();
+    }
+    if (event.target.id === 'taUnit') { curriculum.selectUnit(event.target.value); refresh(); }
+  });
+  document.addEventListener('click',event => {
+    const target = event.target.closest('[data-ta-action]');
+    if (!target) return;
+    const action = target.dataset.taAction, value = target.dataset.taValue;
+    if (action === 'alignment') focusSection('textbookAlignment');
+    else if (action === 'grammar') focusSection('cxGrammar');
+    else if (action === 'next') curriculum.openActivity(curriculum.nextActivity());
+    else if (action === 'unit') {
+      curriculum.selectUnit(value); focusSection('textbookAlignment');
+    } else if (action === 'topic') {
+      const [id,topic] = (value || '').split('|');
+      if (!data.units.some(unit => unit.id === id && unit.grammarKeys.includes(topic))) return;
+      curriculum.selectUnit(id);
+      if (curriculum.unit().id === id) curriculum.openExercise('grammar',topic);
+    } else if (action === 'words') window.openView('words');
+    else if (action === 'practice') window.openView('assessment');
+    else if (action === 'pronunciation') window.openPronunciationLab();
+    else if (['reading','listening','speaking','writing'].includes(action)) curriculum.openActivity({kind:action});
+    else if (['growth','classics','course','literacy'].includes(action)) window.openView(action);
+  });
+  document.addEventListener('toggle',event => {
+    const key = event.target.dataset?.taDetails;
+    if (!key) return;
+    if (event.target.open) expanded.add(key); else expanded.delete(key);
+  },true);
+  document.addEventListener('curriculum:updated',refresh);
+  const previousOpenView = window.openView;
+  window.openView = function (...args) {
+    const result = previousOpenView.apply(this,args);
+    refresh(); return result;
+  };
+  window.TextbookAlignment = {refresh};
+  refresh();
+})();
+
+</script>
+<script data-bundled-src="rw-packs.js">
+// Generated from content/readwrite/*.json by scripts/build-readwrite.py.
+window.RW_PACKS = [{"id":"rw-7a","unitId":"7a-u3","title":"开放日的小向导","englishTitle":"Meet Me by the Clock","genre":"校园留言","paragraphs":["Hi Ben, welcome to our school! On Friday, come to the clock by the school gate at nine. I have a blue bag. My friend Dan has a blue bag too, but his has a football on it. Mine has a yellow star.","First we can visit the art room. My picture of our street is on the wall there. At ten our class reads stories to little children in the library. You can sit with us and listen. Bring your glasses if you want to read a story too!","After that, let’s have lunch in the garden. If it rains, we can eat in my classroom. See you on Friday! Mia"],"questions":[{"skill":"细节","prompt":"How can Ben tell Mia’s bag from Dan’s?","options":["It is blue.","It has a star.","It has a football.","It is by a wall."],"answer":1,"evidence":"Mine has a yellow star.","why":"两人的包都是蓝色；足球图案属于 Dan，墙上挂的是画。"},{"skill":"指代","prompt":"What does “there” mean in the second paragraph?","options":["At the school gate.","In the garden.","In the library.","In the art room."],"answer":3,"evidence":"First we can visit the art room. My picture of our street is on the wall there.","why":"there 接续刚介绍的美术教室；图书馆是下一站。"},{"skill":"人物推断","prompt":"What do Mia’s plans suggest about her as a guide?","options":["She wants every visitor to read aloud.","She cares more about her own picture than her guest.","She considers what different visitors might need.","She expects good weather all day."],"answer":2,"evidence":"You can sit with us and listen. Bring your glasses if you want to read a story too!","why":"Mia 允许只听或一起读，还给雨天准备了室内午餐地点。把这些选择放在一起，能推断她考虑到了来客的不同需要。"}],"short":{"prompt":"Where will they eat if it rains?","limit":5,"sample":"In Mia’s classroom.","evidence":"If it rains, we can eat in my classroom.","note":"也可答 Mia’s classroom；从读者角度作答时把 my 换成 Mia’s。"},"writing":{"genre":"欢迎留言","audience":"来校参观的新朋友","prompt":"给一位来访同学写留言，带他认识你们学校的一角。","points":["说明会合地点和认人办法","介绍一项可以一起做的活动","说明原计划遇到变化怎么办"],"range":"40–60 words","frames":["Meet me by …","If …, we can …"],"sample":"Hi Lin, meet me by the big tree at two. I have a red cap. Let’s go to the music room and play the drums together. If the room is busy, we can go outside and sing our class song. See you soon!","feedback":"红帽子方便认人；备用活动仍与音乐有关。可换成你学校真实的场地和社团。","reviseExample":{"before":"Meet me there.","after":"Meet me by the school gate at nine; look for my red cap.","why":"新同学并不知道 there 指哪里。补上地点、时间和认人线索，读者才能照着做。"}}},{"id":"rw-7b","unitId":"7b-u2","title":"楼下的工具桌","englishTitle":"Borrow a Tool on Saturday","genre":"社区公告","paragraphs":["Do you need a hammer for just one picture? The neighbours in Park Road are starting a tool table. Find us outside the small shop on Saturday from ten to twelve. The shop sells food; the neighbours at the table lend tools for free.","To borrow a tool, write your name and flat number on a card. Leave the card in our green box. Please bring the tool back to the same table next Saturday. We will give the card back to you then.","New to tools? At eleven, Mrs Wu will show visitors how to use a hammer safely. Children can watch with an adult. There is no need to bring a hammer: she has one ready."],"questions":[{"skill":"目的","prompt":"Why did the neighbours write this notice?","options":["To sell tools at a shop.","To find a lost hammer.","To explain a new lending service.","To ask for money for a box."],"answer":2,"evidence":"The neighbours in Park Road are starting a tool table.","why":"全文说明在哪里、怎样借还工具；卖食品的是商店，公告没有募捐或寻物。"},{"skill":"流程","prompt":"What happens to the card when a tool is returned?","options":["It stays at the shop.","The borrower gets it back.","Mrs Wu writes on it.","A child takes it home."],"answer":1,"evidence":"We will give the card back to you then.","why":"then 指下周六还工具时；绿盒用于借用期间存卡。"},{"skill":"细节","prompt":"Who can watch the lesson as described?","options":["A child alone at ten.","Only people with a hammer.","Only people who buy food.","A child with an adult at eleven."],"answer":3,"evidence":"At eleven, Mrs Wu will show visitors how to use a hammer safely. Children can watch with an adult.","why":"十一点示范，儿童由成人陪同；不用自带锤子，也无需购物。"}],"short":{"prompt":"What two details belong on the card?","limit":5,"sample":"Name and flat number.","evidence":"write your name and flat number on a card","note":"也可加上 your；两项信息都要保留。"},"writing":{"genre":"活动公告","audience":"社区邻居","prompt":"为社区交换桌写公告，选择一种适合分享的物品。","points":["写清物品、时间和地点","说明参加者要做什么","给第一次来的人一条实用提示"],"range":"55–75 words","frames":["Come to … on …","Please make sure …"],"sample":"Have you finished a book that someone else might enjoy? Come to our book table in the town hall on Sunday morning. Bring one book and choose another to take home. Please make sure all the pages are there. If you come without a book, you can still sit down and read together with us.","feedback":"公告说明没带书也能参加，照顾了新来者。可按自己选择的物品调整交换规则。","reviseExample":{"before":"Bring a book.","after":"Bring a book with all its pages so the next reader can enjoy the whole story.","why":"保留原来的要求，补出可以检查的条件和原因。"}}},{"id":"rw-8a","unitId":"8a-u4","title":"给种子袋做个家","englishTitle":"The Pocket That Would Not Hold","genre":"制作日志","paragraphs":["Tuesday. I wanted to make a wall pocket for our gardening club’s seed packets. I cut the front off a cereal box and used tape to stick it back on, a little lower than before. It looked fine until I filled it. The packets slid straight through the bottom!","Wednesday. I tried stronger tape at the sides, but another packet fell out. Then I held the pocket up to the light. I could see a thin line of daylight along the bottom. The sides were never the problem. I folded a strip of card over the lower edge and taped both ends in place.","Thursday. I put ten packets inside and gently shook the pocket over my desk. Nothing fell. I added labels only after that test. Next time I will try my design with scrap paper before I cut up a good box."],"questions":[{"skill":"因果","prompt":"Why did the stronger tape fail to help?","options":["The gap was at the bottom.","The packets were wet.","The box had no front.","The labels were too heavy."],"answer":0,"evidence":"I could see a thin line of daylight along the bottom.","why":"胶带贴在两侧，漏缝在底部；标签是在成功测试后才加的。"},{"skill":"顺序","prompt":"Which action came just before adding labels?","options":["Cutting the box.","Holding it up to the light.","Shaking it with packets inside.","Trying a paper model."],"answer":2,"evidence":"I put ten packets inside and gently shook the pocket over my desk. Nothing fell. I added labels only after that test.","why":"摇晃测试紧接着贴标签；纸模型是下次的计划。"},{"skill":"推断","prompt":"What does the writer’s next plan suggest?","options":["Buy larger seed packets.","Use labels instead of tape.","Stop making things from boxes.","Test an idea on cheaper material first."],"answer":3,"evidence":"Next time I will try my design with scrap paper before I cut up a good box.","why":"用废纸先试做，可避免浪费好盒子；作者并未放弃用盒子制作。"}],"short":{"prompt":"What covered the lower edge?","limit":5,"sample":"A strip of card.","evidence":"I folded a strip of card over the lower edge","note":"可答 a folded card strip 等；要说明是卡纸条，不能只写 tape。"},"writing":{"genre":"制作经验分享","audience":"准备做手工的同学","prompt":"写一次制作或修理经历，让同学知道怎样判断改进是否有效。","points":["说明原来的用途和遇到的问题","写出观察到的线索和一次具体改动","描述你如何测试结果"],"range":"65–90 words","frames":["I noticed that …","To check the change, I …"],"sample":"Our class needed a sign for the plant sale. I made one from card, but it kept falling forward on the table. I noticed that its paper foot was too short to support it. I cut a longer foot from an old folder and fixed it to the back. To check the change, I opened the window and let the wind blow across the table. The sign stayed up.","feedback":"例文用“向前倒”说明为什么加长支脚，再用风测试。可改写成笔筒、书架或其他亲手做过的东西。","reviseExample":{"before":"Then it was better.","after":"After I covered the gap at the bottom, all ten packets stayed inside.","why":"用具体的改动和测试结果解释 better 的含义。"}}},{"id":"rw-8b","unitId":"8b-u4","title":"给下一位读者的一张书签","englishTitle":"A Bookmark for One Reader","genre":"读书会故事","paragraphs":["At our book swap, we put a bookmark inside each book. Each bookmark was a message to the next reader. I wrote, ‘This book is wonderful. Everyone will like it.’ I put my note inside The Wind in the Willows and waited.","A new student called May picked up the book. ‘Would I like it if I usually read about friendships?’ she asked. Suddenly ‘wonderful’ seemed too small a word. I told her about Mole trying to row before he was ready and falling into the river. Rat helped him out. What stayed with me was what happened after the rescue: Rat was still willing to teach his friend.","May opened the first chapter. I turned over my bookmark and wrote a different message: ‘Have you ever been afraid to try again after a mistake? Watch how Rat treats Mole.’ I left the rest of the page blank for May. I wanted to hear what she noticed, even if it was different from my idea."],"questions":[{"skill":"写作意图","prompt":"Why does the writer tell May about the river scene?","options":["To warn her that boating is dangerous.","To show how the book explores a friendship she might enjoy.","To explain how to organise the book swap.","To tell her the ending so she need not read."],"answer":1,"evidence":"Would I like it if I usually read about friendships?","why":"May 关心的是友谊，作者因而选了河鼠救起朋友且仍愿意教他的情节。落水是故事细节，不是谈话的目的。"},{"skill":"语境理解","prompt":"Why does ‘wonderful’ seem ‘too small a word’?","options":["It is hard for May to pronounce.","There is not enough space on the bookmark.","The writer has stopped liking the book.","It gives May no detail to help her choose."],"answer":3,"evidence":"‘Would I like it if I usually read about friendships?’ she asked. Suddenly ‘wonderful’ seemed too small a word. I told her about Mole trying to row before he was ready and falling into the river.","why":"结合前一句的具体问题和后面的故事细节可知，wonderful 太笼统，读者不能据此判断这本书是否适合自己。"},{"skill":"态度推断","prompt":"What does the blank space on the bookmark suggest?","options":["The writer welcomes May’s own reading of the scene.","May must copy the writer’s opinion.","May has already finished the whole book.","The writer cannot remember the characters’ names."],"answer":0,"evidence":"I wanted to hear what she noticed, even if it was different from my idea.","why":"留白邀请另一位读者回应；作者接受不同想法，并没有要求她给出同一个答案。"}],"short":{"prompt":"Who was the empty space for?","limit":5,"sample":"May.","evidence":"I left the rest of the page blank for May.","note":"May 或 The new student 都能指明对象。问的是谁，不必复述留白的理由。"},"writing":{"genre":"英文荐书信","audience":"刚加入班级共读小组的一位同学","prompt":"给这位同学写一封信，推荐一本你确实读过的书。选书和情节可以与材料不同。","points":["说出书名，并回应对方的一项阅读兴趣或顾虑","选一个具体行动、决定或场景，解释它为什么值得读","写出这个细节怎样改变你的想法，并给对方一个阅读邀请"],"range":"75–100 words","frames":["Since you enjoy …, you might like …","What stayed with me was … because …","When you read this scene, look for …"],"sample":"Dear Ben,\nSince you enjoy stories about friends, try The Wind in the Willows. In the first chapter, Mole tries to row and falls into the river. Rat gets him out. I expected Rat to get angry and put the boat away, but he still offers to teach Mole. That part made me think about how I react when a teammate makes a mistake. Helping someone try again can mean more than telling them what went wrong. Read that chapter and tell me what you think of Rat.\nYours,\nAn","feedback":"这封信先回应读者的兴趣，用河鼠的行动支撑推荐，再说明自己会怎样对待队友。写你自己读过的书时，可换成另一个人物、决定或观察，不用沿用友谊这个主题。","reviseExample":{"before":"Rat is nice, so the book is good.","after":"Even after Mole tips the boat, Rat offers to teach him to row. That made me want to read about their next trip.","why":"用一个可核对的行动代替 nice，再交代读者为什么被打动。"}}},{"id":"rw-9a","unitId":"9a-u3","title":"小记者卡壳之后","englishTitle":"The Question That Wasn't on My List","genre":"校广播站来稿","paragraphs":["At my first practice interview for school radio, I took a page of carefully written questions. My guest, Jo, repairs bikes. When I asked about her hardest repair, she said, “The bike was fine. The hard part was getting its owner to ride again after his fall.” I wanted to know what she had done. Instead, I looked down and read the next question: “Which tools do you use?”","When we listened to the recording, I blamed my voice. My partner Kai stopped it just after Jo said “his fall”. He asked me what I wanted to hear next. Without looking at my page, I said, “How did you help him get back on?” Kai smiled. I hadn't run out of questions. I had stopped listening to my own curiosity.","For our second practice, I kept only three short questions on a card. I left a space under each one to note something my guest actually said. Jo mentioned walking beside the bike, so I asked where they had walked. It turned out that the rider's first trip was just to his own front gate. That little journey was the part our editor chose for the show."],"questions":[{"skill":"推断","prompt":"Why did the first interview miss a chance to tell a good story?","options":["Jo wanted to keep the rider's fall a secret.","The reporter followed the list even when Jo offered a new direction.","Kai stopped the interview before Jo could finish.","The reporter knew too little about bike tools."],"answer":1,"evidence":"I wanted to know what she had done. Instead, I looked down and read the next question","why":"小记者已经对摔倒后如何重新骑车产生了好奇，却转去问下一道工具题。Jo 主动谈起骑车人，没有保密；Kai 暂停的是事后的录音；工具知识也不是障碍。"},{"skill":"写作意图","prompt":"Why does the writer include the words “just to his own front gate”?","options":["To recommend a safe place to repair a bike.","To explain why the first interview was short.","To show that the rider had gone further than anyone expected.","To show the small but meaningful step the new question uncovered."],"answer":3,"evidence":"It turned out that the rider's first trip was just to his own front gate. That little journey was the part our editor chose for the show.","why":"第一次重新骑车只到自家门口距离短，对摔倒后重新尝{% endraw %}
