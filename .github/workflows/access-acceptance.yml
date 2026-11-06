@@ -1,0 +1,21 @@
+name: Regional access acceptance
+on:
+  push:
+    branches: [access-diagnostics-20261106]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install test driver only
+        run: python3 -m pip install playwright==1.56.0
+      - name: Verify missing full-check entry before implementation
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: python3 -m unittest qa.test_access.AccessTests.test_01_full_entry_exists
