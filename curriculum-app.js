@@ -108,7 +108,7 @@
       `<section class="cx-unit-hero"><div><span class="cx-kicker">${esc(unitLabel(u))}</span><h2>${esc(u.title)}</h2><p>${esc(u.theme)}</p><ul>${u.goals.map(g => `<li>${esc(g)}</li>`).join('')}</ul></div><div class="cx-unit-status"><strong id="cxUnitPercent">${C.progress(state,u).percent}%</strong><span id="cxUnitDone">${C.progress(state,u).done} / 6 环节已完成</span><small>记录学习活动的完成情况</small>${action('查看本单元练习','exercise','vocabulary','primary-btn')}</div></section>` +
       `<div class="cx-milestones" id="cxMilestones"></div>` +
       renderTextbookGuide() +
-      `<section class="cx-section" id="cxVocabulary"><div class="cx-section-head"><div><span class="cx-kicker">01 · WORDS IN CONTEXT</span><h3>主题核心词汇</h3><p>本单元精选 ${u.vocabulary.length} 个词。读例句、回想中文，再进行词义练习。</p></div><div class="cx-actions">${action('背本单元单词 →','word-study','','primary-btn')}${action('词义练习 →','exercise','vocabulary')}</div></div><div class="cx-word-grid">${u.vocabulary.map((w,i) => `<article class="cx-word"><div><h4 lang="en">${esc(w.word)}</h4><button type="button" class="cx-audio" data-caction="word-audio" data-value="${i}" aria-label="朗读 ${esc(w.word)}">▶</button></div><details><summary>回想词义，再展开</summary><p>${esc(w.meaning)}</p></details><p lang="en">${esc(w.example)}</p><label><input type="checkbox" data-cword="${esc(w.word)}"${checked(state.words[u.id]?.includes(w.word))}> 我已复习</label></article>`).join('')}</div></section>` +
+      `<section class="cx-section" id="cxVocabulary"><div class="cx-section-head"><div><span class="cx-kicker">01 · WORDS IN CONTEXT</span><h3>教材词汇与主题拓展</h3><p>${u.vocabularyAlignment ? `本单元已整合 ${u.vocabulary.filter(w=>w.category==='textbook_word'||w.category==='textbook_phrase').length} 项教材词汇/短语，并保留 ${u.vocabulary.filter(w=>w.category==='extension').length} 项主题拓展。` : `本站当前提供 ${u.vocabulary.length} 项精选词汇，尚未完成本册教材词表逐项核验。`}</p></div><div class="cx-actions">${action('背本单元单词 →','word-study','','primary-btn')}${action('词义练习 →','exercise','vocabulary')}</div></div><div class="cx-word-grid">${u.vocabulary.map((w,i) => `<article class="cx-word"><div><h4 lang="en">${esc(w.word)}</h4><span class="cx-kicker">${w.category === 'extension' ? '主题拓展' : w.category === 'textbook_phrase' ? '教材短语' : w.category === 'textbook_word' ? '教材词汇' : '站内精选'}</span><button type="button" class="cx-audio" data-caction="word-audio" data-value="${i}" aria-label="朗读 ${esc(w.word)}">▶</button></div><details><summary>回想词义，再展开</summary><p>${esc(w.meaning)}</p></details><p lang="en">${esc(w.example)}</p><label><input type="checkbox" data-cword="${esc(w.word)}"${checked(state.words[u.id]?.includes(w.word))}> 我已复习</label></article>`).join('')}</div></section>` +
       renderLanguageFocus() +
       `<section class="cx-section" id="cxGrammar"><div class="cx-section-head"><div><span class="cx-kicker">02 · NOTICE THE PATTERN</span><h3>语法小课堂</h3><p>${u.grammarNote ? esc(u.grammarNote) : '先理解规则和例句，再完成每个知识点的 5 道练习。'}</p></div></div><div class="cx-grammar-grid">${u.grammarKeys.map(id => { const t = topics.get(id); return t ? `<article class="cx-grammar"><h4>${esc(t.title)}</h4>${t.rules.map(r => `<div class="cx-rule"><strong>${esc(r.label)}</strong><p>${esc(r.explanation)}</p><blockquote lang="en">${esc(r.example)}<small lang="zh-CN">${esc(r.translation)}</small></blockquote></div>`).join('')}<p class="cx-pitfall"><strong>容易混淆：</strong>${esc(t.pitfall)}</p>${action('练习这个知识点 · 5 题','grammar',id)}</article>` : ''; }).join('')}</div></section>` +
       `<section class="cx-section"><div class="cx-section-head"><div><span class="cx-kicker">03 · READ, SPEAK & WRITE</span><h3>把所学用起来</h3><p>与这个单元一起更新的课外阅读和表达任务。</p></div></div><div class="cx-linked-grid"><article class="cx-linked cx-linked-reading"><span>📖 原创课外阅读</span><h4 lang="en">${esc(u.reading.title)}</h4><p>${esc(u.reading.summary)}</p><small>${C.wordCount(u.reading.text)} 词 · ${esc(u.reading.level)} · 5 道理解题</small>${action('打开这篇阅读 →','reading','','primary-btn')}</article><article class="cx-linked"><span>🎧 情境听说</span><h4 lang="en">${esc(u.dialogue.title)}</h4><p>听一段完整对话，练习回答三个开放问题，再录音回听。</p><small>6 轮对话 · 5 道听力题</small>${action('进入听说练习 →','speaking')}</article><article class="cx-linked"><span>✍️ 主题写作</span><h4>用英语表达你的想法</h4><p>${esc(u.writing.prompt)}</p><small>写作提纲 · 原创范文 · 自查清单</small>${action('开始写作 →','exercise','writing')}</article></div></section>` + editionDetails(b);
@@ -133,8 +133,10 @@
     if (kind === 'grammar') return (topics.get(variant) || topics.get(u.grammarKeys[0])).questions;
     if (kind === 'reading') return u.reading.questions;
     if (kind === 'listening') return u.dialogue.questions;
-    const offset = variant === 'set2' ? 3 : 0;
-    return Array.from({length:5}, (_,i) => {
+    const setNumber = Math.max(1, Number(String(variant || 'set1').replace('set','')) || 1);
+    const offset = u.vocabularyAlignment ? (setNumber - 1) * 5 : (setNumber === 2 ? 3 : 0);
+    const count = u.vocabularyAlignment ? Math.max(0, Math.min(5, u.vocabulary.length - offset)) : 5;
+    return Array.from({length:count}, (_,i) => {
       const index = (i + offset) % u.vocabulary.length, w = u.vocabulary[index];
       const distractors = u.vocabulary.filter(x => x.meaning !== w.meaning).slice(0,3).map(x => x.meaning);
       const correctIndex = (index + u.number) % 4, options = [...distractors]; options.splice(correctIndex,0,w.meaning);
@@ -143,7 +145,7 @@
   }
   function quizDescriptor(kind, variant) {
     const u = unit();
-    const contentId = kind === 'grammar' ? (u.grammarKeys.includes(variant) ? variant : u.grammarKeys[0]) : kind === 'vocabulary' ? (variant === 'set2' ? 'set2' : 'set1') : 'main';
+    const contentId = kind === 'grammar' ? (u.grammarKeys.includes(variant) ? variant : u.grammarKeys[0]) : kind === 'vocabulary' ? (/^set\d+$/.test(variant) ? variant : 'set1') : 'main';
     return {unitId:u.id,kind,variant:contentId,key:C.quizKey(u.id,kind,contentId)};
   }
   function quizRevision(kind, variant) {
@@ -167,7 +169,7 @@
   function renderAssessment() {
     const u = unit(), scores = C.latest(state,u.id);
     $('cx-assessment').innerHTML = scopeHeader('PRACTISE & UNDERSTAND', '本单元练习', `${u.title} · 作答后即时核对答案，草稿与记录按单元保存。`) +
-      `<div class="cx-practice-cards">${['vocabulary','grammar','reading','listening','writing'].map((kind,i) => `<article class="cx-practice-card"><span class="cx-kicker">0${i+1} · ${['WORDS','GRAMMAR','READING','LISTENING','WRITING'][i]}</span><h3>${names[kind]}${kind === 'writing' ? '与自查' : '练习'}</h3><p>${({vocabulary:'两组词义练习，覆盖本单元 8 个精选词。',grammar:`${u.grammarKeys.length} 个语法知识点，每个知识点 5 题。`,reading:`${u.reading.title} · 5 道理解题。`,listening:'6 轮原创情境对话，5 道理解题。',writing:'主题提纲、自动保存草稿和原创范文。'})[kind]}</p><small data-score-kind="${kind}">${scores[kind] ? '最近独立作答 '+scores[kind].correct+'/5' : kind === 'writing' && state.writing[u.id]?.savedAt ? '已保存写作自查' : '可以从这里开始'}</small>${action(kind === 'writing' ? '打开写作' : '开始练习','exercise',kind)}</article>`).join('')}</div><div class="exercise-workspace cx-workspace" id="cxQuizWorkspace" hidden></div>`;
+      `<div class="cx-practice-cards">${['vocabulary','grammar','reading','listening','writing'].map((kind,i) => `<article class="cx-practice-card"><span class="cx-kicker">0${i+1} · ${['WORDS','GRAMMAR','READING','LISTENING','WRITING'][i]}</span><h3>${names[kind]}${kind === 'writing' ? '与自查' : '练习'}</h3><p>${({vocabulary:'按每组 5 项练习本单元词汇与短语；记忆卡可覆盖全部词条。',grammar:`${u.grammarKeys.length} 个语法知识点，每个知识点 5 题。`,reading:`${u.reading.title} · 5 道理解题。`,listening:'6 轮原创情境对话，5 道理解题。',writing:'主题提纲、自动保存草稿和原创范文。'})[kind]}</p><small data-score-kind="${kind}">${scores[kind] ? '最近独立作答 '+scores[kind].correct+'/5' : kind === 'writing' && state.writing[u.id]?.savedAt ? '已保存写作自查' : '可以从这里开始'}</small>${action(kind === 'writing' ? '打开写作' : '开始练习','exercise',kind)}</article>`).join('')}</div><div class="exercise-workspace cx-workspace" id="cxQuizWorkspace" hidden></div>`;
     if (currentQuiz?.unitId === u.id) renderQuiz();
   }
   function openExercise(kind, variant) {
@@ -188,7 +190,7 @@
   function nextActivity() { return C.nextActivity(state,unit()); }
   function activityLabel(activity) {
     if (activity.kind === 'complete') return '本单元已完成 · 查看学习记录 →';
-    const detail = activity.kind === 'vocabulary' ? (activity.variant === 'set2' ? '词汇第 2 组' : '词汇第 1 组') : activity.kind === 'grammar' ? topicTitle(activity.variant || unit().grammarKeys[0]) : names[activity.kind];
+    const detail = activity.kind === 'vocabulary' ? `词汇第 ${Math.max(1,Number(String(activity.variant || 'set1').replace('set',''))||1)} 组` : activity.kind === 'grammar' ? topicTitle(activity.variant || unit().grammarKeys[0]) : names[activity.kind];
     return '下一步：'+detail+' →';
   }
   function nextActivityButton() { return action(esc(activityLabel(nextActivity())),'next','','primary-btn'); }
@@ -220,7 +222,7 @@
     if (kind === 'writing') { renderWriting(heading); return; }
     const d = state.quizDrafts[key], qs = questionsFor(u,kind,variant);
     const waitingToSave = unsavedQuizKeys.has(key);
-    const selector = kind === 'grammar' ? `<label class="cx-topic-picker">练习知识点<select id="cxGrammarTopic">${u.grammarKeys.map(id => `<option value="${id}"${selected(variant,id)}>${esc(topicTitle(id))}</option>`).join('')}</select></label>` : kind === 'vocabulary' ? `<div class="cx-actions">${action('第 1 组 · 词 1—5','vocab-set','set1',variant === 'set1' ? 'primary-btn' : 'outline-btn')}${action('第 2 组 · 词 4—8','vocab-set','set2',variant === 'set2' ? 'primary-btn' : 'outline-btn')}</div>` : '';
+    const selector = kind === 'grammar' ? `<label class="cx-topic-picker">练习知识点<select id="cxGrammarTopic">${u.grammarKeys.map(id => `<option value="${id}"${selected(variant,id)}>${esc(topicTitle(id))}</option>`).join('')}</select></label>` : kind === 'vocabulary' ? `<div class="cx-actions cx-vocab-sets">${(u.vocabularyAlignment ? Array.from({length:Math.ceil(u.vocabulary.length/5)},(_,i)=>({id:'set'+(i+1),start:i*5+1,end:Math.min((i+1)*5,u.vocabulary.length)})) : [{id:'set1',start:1,end:5},{id:'set2',start:4,end:8}]).map((g,i)=>action(`第 ${i+1} 组 · ${g.start}—${g.end}`, 'vocab-set', g.id, (variant||'set1')===g.id ? 'primary-btn' : 'outline-btn')).join('')}</div>` : '';
     let material = '';
     if (kind === 'reading') material = `<details class="exercise-material" open><summary lang="en">${esc(u.reading.title)}</summary><div class="cx-prose compact" lang="en">${paragraph(u.reading.text)}</div></details>`;
     if (kind === 'listening') material = `<div class="exercise-material"><div class="cx-actions">${action('▶ 播放对话','listen')}${action(d.showTranscript ? '收起文本' : '查看听力文本','transcript')}</div><p class="cx-small">使用设备英语语音。${d.assisted ? '本次已查看文本，按文本辅助练习记录。' : '先听后答；查看文本会标记为辅助练习。'}</p>${d.showTranscript ? `<div class="cx-dialogue">${u.dialogue.turns.map(t => `<p><strong>${esc(t.speaker)}</strong><span lang="en">${esc(t.text)}</span></p>`).join('')}</div>` : ''}</div>`;

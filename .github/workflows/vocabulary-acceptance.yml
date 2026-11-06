@@ -1,0 +1,25 @@
+name: Textbook vocabulary acceptance
+on:
+  push:
+    branches:
+      - "textbook-vocab-*"
+jobs:
+  vocabulary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify textbook vocabulary data and source boundaries
+        run: python -m unittest qa.test_vocab_integration -v
+      - name: Verify learning-record compatibility
+        run: node qa/test_vocab_runtime.js
+      - name: Verify modified JavaScript syntax
+        run: |
+          node --check curriculum-data.js
+          node --check curriculum-app.js
+          node --check word-study-app.js

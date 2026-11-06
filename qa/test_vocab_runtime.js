@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm');
+const c={window:{},globalThis:{}};vm.createContext(c);
+vm.runInContext(fs.readFileSync(__dirname+'/../curriculum-data.js','utf8'),c);
+c.globalThis.ENGLISH_CURRICULUM=c.window.ENGLISH_CURRICULUM;
+vm.runInContext(fs.readFileSync(__dirname+'/../word-study-core.js','utf8'),c);
+const core=c.window.WordStudyCore,u=c.window.ENGLISH_CURRICULUM.units.find(x=>x.id==='7a-u1');
+if(u.vocabulary.length!==45)throw Error('Unit 1 item count mismatch');
+for(let i=0;i<8;i++)if(core.key('7a-u1',i)!==('7a-u1::'+i))throw Error('Legacy key changed '+i);
+const state=core.normalize({}),card=core.createCard('7a-u1',8);core.reveal(card);
+if(!core.evaluate(state,card,'remembered',new Date('2026-11-06T08:00:00Z'))||!state.records['7a-u1::8'])throw Error('New vocabulary review did not persist');
+console.log('PASS: Unit 1 has 45 entries; legacy keys stable; appended phrase review stores.');
