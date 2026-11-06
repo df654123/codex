@@ -4,52 +4,201 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#155547">
-<title>手机联网检测 · 江苏初中英语学习站</title>
+<meta name="referrer" content="no-referrer">
+<title>网络与课程检测 · 江苏初中英语学习站</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f3f7f4;color:#18342b;font:17px/1.65 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}main{width:min(100%,37rem);margin:8vh auto;padding:0 1.15rem 2rem}.eyebrow{display:block;color:#3c6758;font-size:.86rem;letter-spacing:.07em;font-weight:650}h1{font-size:clamp(1.7rem,6vw,2.3rem);margin:.45rem 0 .4rem;line-height:1.3}.lead{color:#425b52;margin:0 0 1.35rem}.card{background:#fff;border:1px solid #cddbd3;border-radius:1rem;padding:1.3rem}.card strong{display:block;font-size:1.3rem;line-height:1.45}.card p{margin:.4rem 0 0}.details{color:#50645b;font-size:.93rem}.card[data-state="pass"]{border-left:5px solid #1d7450}.card[data-state="fail"]{border-left:5px solid #9d5d25}.actions{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.15rem 0}.actions>*{flex:1;text-align:center;min-width:9rem;border-radius:.65rem;padding:.72rem .8rem;border:1px solid #276650;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}button{background:white;color:#245442}button:disabled{opacity:.65;cursor:wait}a{background:#185944;color:white}button:focus-visible,a:focus-visible{outline:3px solid #3267a2;outline-offset:3px}.tip{padding-top:.85rem;border-top:1px solid #d6e1da;color:#41554c;font-size:.94rem}.tip p{margin:.4rem 0}footer{font-size:.8rem;margin-top:1.3rem;color:#54685c}
-</style></head>
+*{box-sizing:border-box}body{margin:0;background:#f3f7f4;color:#18342b;font:16px/1.7 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}main{max-width:48rem;margin:5vh auto;padding:0 1.1rem 3rem}.eyebrow,small{color:#526b5e}.eyebrow{font-weight:700;font-size:.9rem}h1{font-size:clamp(1.6rem,6vw,2.3rem);line-height:1.3;margin:.5rem 0 1rem}h2{font-size:1.22rem;margin:0 0 .6rem}p{margin:.5rem 0}.card{margin:1rem 0;padding:1.2rem;border:1px solid #cddbd3;border-radius:1rem;background:white;min-width:0}.status{border-left:5px solid #879b8f}.status[data-state=pass]{border-left-color:#1d7450}.status[data-state=fail],.status[data-state=stale],.status[data-state=unsupported]{border-left-color:#ab6427}.status strong{font-size:1.12rem;display:block}.details{color:#4e6457;font-size:.92rem}.actions{display:flex;gap:.65rem;flex-wrap:wrap;margin:.85rem 0}.actions>*{flex:1 1 10rem}button,a.button{display:inline-block;min-height:44px;border:1px solid #276650;border-radius:.65rem;padding:.65rem .9rem;background:white;color:#245442;font:inherit;font-weight:600;text-align:center;text-decoration:none;cursor:pointer}button.primary,a.primary{background:#185944;color:white}button:disabled{opacity:.6;cursor:default}a{color:#1b6248}fieldset{border:0;padding:0;margin:.8rem 0;min-width:0}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem}label{display:block;font-size:.93rem;font-weight:600}select,textarea{width:100%;min-width:0;font:inherit;color:#18342b;border:1px solid #9cb4a5;border-radius:.5rem;background:#fff;padding:.6rem}select{min-height:44px;margin:.25rem 0 .5rem}textarea{font-size:14px;line-height:1.65;resize:vertical}button:focus-visible,a:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #3267a2;outline-offset:3px}details{margin:.8rem 0}summary{cursor:pointer;font-weight:650;padding:.3rem 0}.resource{padding:.65rem 0;border-bottom:1px solid #e5ece7;overflow-wrap:anywhere;font-size:.88rem}.resource[data-state=fail]{color:#8b401d}.resource small{display:block}.report-note{font-size:.88rem;color:#58685d}.tag{display:inline-block;border-radius:.4rem;background:#e9f3eb;padding:.15rem .5rem;font-size:.85rem;margin-bottom:.4rem}footer{font-size:.8rem;color:#5a6d60;margin-top:1.5rem}[hidden]{display:none!important}@media(max-width:580px){.fields{grid-template-columns:1fr}.card{padding:1rem}main{margin-top:1.8rem}.actions>*{flex-basis:100%}}
+</style>
+</head>
 <body><main>
-<span class="eyebrow">江苏初中英语学习站</span>
-<h1>这台手机能连上学习站吗？</h1>
-<p class="lead">关掉 Wi-Fi 测手机流量，连上 Wi-Fi 再测一次。两次都可以用这一页。</p>
-<section id="panel" class="card" aria-live="polite" aria-atomic="true" data-state="waiting">
-<strong id="status">正在检测当前网络…</strong><p id="detail" class="details">正在向学习站请求一份新的站点信息。</p>
+<span class="eyebrow">江苏初中英语学习站 · 跨地区访问验收</span>
+<h1>这台设备能完整打开学习站吗？</h1>
+<p>先确认联网，再核对课程资源。结果只代表<strong>当前设备、当前网络、本次时间</strong>，不能代替其他地区的实测。</p>
+<section id="panel" class="card status" data-state="waiting" role="status" aria-live="polite">
+<strong id="status">正在检测当前网络…</strong><p id="detail" class="details">正在请求新的站点信息，不以之前的缓存判断联网。</p>
 </section>
-<noscript><p>请在支持 JavaScript 的浏览器打开此页，才能检测网络和使用练习。</p></noscript>
-<div class="actions"><a href="./#home">进入学习站</a><button id="retry" type="button">重新检测</button></div>
-<div class="tip"><p><b>切换网络后：</b>等手机状态栏显示新的网络，再点「重新检测」。每次检测都会重新联网。</p>
-<p><b>想断网学习：</b>先进入学习站，等到显示「已可离线学习」。请用原来的浏览器继续学习，练习记录保存在那里。</p></div>
-<footer>无需登录。检测不读取或修改学习记录。</footer>
+<noscript><p>本页检测需要 JavaScript。请用系统浏览器打开；也可直接尝试下面的学习站入口。</p></noscript>
+<div class="actions"><a class="button primary" href="./#home" target="_blank" rel="noopener noreferrer">进入学习站</a><button id="retry" type="button">重新检测</button></div>
+<section class="card">
+<span class="tag">01 · 资源检查</span><h2>首页打开了，课程也完整吗？</h2>
+<p>完整检测会下载并核对当前发布清单内的页面、课程数据、脚本、样式和图标，当前版本约 1.6 MB。不执行下载的代码，不改动离线课程或学习记录。</p>
+<fieldset id="environment"><legend class="details">可选：为这次检测注明环境（由您填写，不自动定位）</legend>
+<div class="fields">
+<label for="region">所在省份或地区<select id="region"><option value="未填写">不填写 / 不确定</option></select></label>
+<label for="operator">网络运营商<select id="operator"><option>不确定</option><option>中国移动</option><option>中国联通</option><option>中国电信</option><option>中国广电</option><option>其他</option></select></label>
+<label for="network">网络类型<select id="network"><option>不确定</option><option>手机流量</option><option>家庭 Wi-Fi</option><option>校园网</option><option>单位或公共 Wi-Fi</option><option>其他</option></select></label>
+</div></fieldset>
+<div class="actions"><button class="primary" id="fullCheck" type="button">检测全部课程资源</button></div>
+<section id="fullPanel" class="status card" data-state="idle" role="status" aria-live="polite"><strong id="fullTitle">尚未进行完整检测</strong><p id="fullDetail" class="details">快速联网通过不等于课程资源齐全。</p></section>
+<details><summary>查看逐项检测结果</summary><div id="assetRows"></div></details>
+<p class="details">若出现内容不一致，可能正在发布新版，也可能下载不完整；请稍后重测。检测失败本身不能确定是运营商屏蔽。</p>
+</section>
+<section class="card">
+<span class="tag">02 · 实际使用（手动记录）</span><h2>亲自练一次，再确认能用</h2>
+<p>资源核对不替代实际操作。保持本页打开，在同一个浏览器的新页面进入学习站，完成后回来填写。</p>
+<fieldset id="manualFields" disabled>
+<label for="manualHome">首页和课程能否正常显示<select id="manualHome"><option>未测</option><option>通过</option><option>失败</option></select></label>
+<label for="manualVocab">完成一次词汇练习，刷新后记录仍在<select id="manualVocab"><option>未测</option><option>通过</option><option>失败</option></select></label>
+<label for="manualOffline">已保存离线课程后，断网关闭学习页再重开<select id="manualOffline"><option>未测</option><option>通过</option><option>失败</option></select></label>
+</fieldset>
+<p class="details">离线测试前须在学习站确认「已保存，可离线学习」。换设备或换浏览器不会自动同步记录；语音取决于本机英语语音包。此处的离线实测包含关闭学习页，不要求关闭这张报告页。</p>
+</section>
+<section class="card">
+<span class="tag">03 · 反馈结果</span><h2>把报告发回来，不必逐项描述</h2>
+<p>报告仅留在本页，不会自动上传。复制后可发给平台维护者；关闭页面前请自行保存。</p>
+<label for="report">本次检测报告</label><textarea id="report" readonly rows="11" spellcheck="false" aria-describedby="reportPrivacy"></textarea>
+<div class="actions"><button id="copyReport" type="button">复制报告</button><button id="downloadReport" type="button">下载文字报告</button></div>
+<p id="copyStatus" role="status" aria-live="polite" class="details"></p>
+<p id="reportPrivacy" class="report-note">报告不包含姓名、学校、IP、精确位置、作答内容或学习记录。页面不读取这些数据，也不写入学习存储。访问网站仍会产生托管服务正常的网络请求。</p>
+</section>
+<details class="card"><summary>检测页也打不开，或者网络变了怎么办？</summary>
+<p>检测页本身打不开时，它无法替您生成结果。请直接反馈“省份（可选）＋运营商＋流量或 Wi-Fi＋浏览器＋打不开”，错误截图请遮住个人信息。</p>
+<p>切换网络后，等状态栏确认，再重新检测。改变上面的环境选项会把旧结果标为待重测；手机系统未通知网页的网络变化，需要您主动重测。</p>
+<p>外部教材链接、原著链接和更新仍需网络。已保存的课程可以按离线入口使用，但这不表示互联网恢复。</p>
+</details>
+<footer>检测工具 1.1 · 保留原学习入口 · 不宣称全国全网通过</footer>
 </main>
 <script>
 (() => {
-  'use strict';
-  const el=id=>document.getElementById(id), panel=el('panel'), status=el('status'), detail=el('detail'), retry=el('retry');
-  function show(state,title,message){panel.dataset.state=state;status.textContent=title;detail.textContent=message;}
-  async function check(){
-    if(retry.disabled)return;
-    retry.disabled=true;
-    show('waiting','正在检测当前网络…','正在向学习站请求一份新的站点信息。');
-    const stamp=()=>new Date().toLocaleTimeString('zh-CN',{hour12:false});
-    let timer;
-    const controller=typeof AbortController==='function'?new AbortController():null;
-    try {
-      const target=new URL('./manifest.webmanifest',location.href);
-      target.searchParams.set('network_check',Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
-      const get=async()=>{
-        const res=await fetch(target.href,{cache:'no-store',credentials:'omit',redirect:'error',...(controller?{signal:controller.signal}:{})});
-        if(!res.ok)throw new Error('http');
-        const m=await res.json();
-        const sitePath=new URL('./',location.href).pathname;
-        if(m.id!==sitePath||m.name!=='江苏初中英语学习站'||m.start_url!=='./#home')throw new Error('content');
-      };
-      await Promise.race([get(),new Promise((_,reject)=>{timer=setTimeout(()=>{if(controller)controller.abort();reject(new Error('timeout'));},12000);})]);
-      show('pass','当前网络已连上学习站','检测时间 '+stamp()+'。已通过当前网络读到本站信息，可以进入学习。');
-    }catch(_){
-      show('fail','本次未能确认联网','检测时间 '+stamp()+'。请确认手机已连网后再试；若曾在这个浏览器保存课程，也可以直接进入学习站试用离线内容。');
-    }finally{clearTimeout(timer);retry.disabled=false;}
+'use strict';
+const $=id=>document.getElementById(id), base=new URL('./',location.href);
+const envIds=['region','operator','network'], manualIds=['manualHome','manualVocab','manualOffline'];
+const regions=['北京','天津','河北','山西','内蒙古','辽宁','吉林','黑龙江','上海','江苏','浙江','安徽','福建','江西','山东','河南','湖北','湖南','广东','广西','海南','重庆','四川','贵州','云南','西藏','陕西','甘肃','青海','宁夏','新疆','香港','澳门','台湾','其他地区'];
+regions.forEach(name=>{const option=document.createElement('option');option.textContent=name;option.value=name;$('region').appendChild(option);});
+const browser=()=>{const u=navigator.userAgent||'';return /MicroMessenger/i.test(u)?'微信内置浏览器':/Edg/i.test(u)?'Edge':/Firefox|FxiOS/i.test(u)?'Firefox':/Chrome|CriOS/i.test(u)?'Chrome':/Safari/i.test(u)?'Safari':'其他 / 未识别';};
+const environment=()=>({region:$('region').value,operator:$('operator').value,network:$('network').value,browser:browser()});
+let busy=false, full=null, quick={title:'尚未完成',at:''}, envChanged=false;
+const errors={http:'服务器返回异常',timeout:'请求超时',cancelled:'检测已停止或超过总时限',size:'资源长度不一致',hash:'资源内容不一致',manifest:'发布清单格式不符合要求',scope:'发布清单包含不受支持的资源地址',network:'网络请求失败（连接、拦截或重定向原因未定位）'};
+const reason=e=>errors[e && e.message] || (/^HTTP \d{3}$/.test(e && e.message)?e.message:errors.network);
+function time(){return new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})+' 北京时间';}
+function panel(state,title,detail){$('panel').dataset.state=state;$('status').textContent=title;$('detail').textContent=detail;}
+function fullPanel(state,title,detail){$('fullPanel').dataset.state=state;$('fullTitle').textContent=title;$('fullDetail').textContent=detail;}
+function lock(value){busy=value;$('retry').disabled=value;$('fullCheck').disabled=value;$('environment').disabled=value;$('manualFields').disabled=value||!full||full.stale;}
+function report(){
+ const e=full?full.env:environment();
+ const out=['江苏初中英语学习站 · 网络检测报告','检测工具：1.1','入口：'+base.href,
+ '地区（用户自报）：'+e.region,'运营商（用户自报）：'+e.operator,'网络（用户自报）：'+e.network,'浏览器（粗分类）：'+e.browser,
+ '快速联网：'+quick.title+(quick.at?'；'+quick.at:''),
+ full?'完整检测开始：'+full.started:'完整检测：未测'];
+ if(full){
+  if(full.stale)out.push('环境已修改或已重新检查联网，请重测完整资源；以下旧结果不代表当前环境。');
+  out.push('完整检测结论：'+full.title,'课程版本：'+(full.version||'未确认'),'发布标识：'+(full.build||'未确认'));
+  if(full.finished)out.push('完整检测结束：'+full.finished);
+  for(const r of full.rows)out.push((r.state==='pass'?'通过':r.state==='fail'?'未通过':'未完成')+' | '+r.name+' | '+r.detail);
+ }
+ const prefix=full&&full.stale?'上次手动记录（已失效）':'本次手动记录';
+ out.push('',prefix+'：');
+ ['首页和课程显示','词汇提交并刷新','断网关闭后重开'].forEach((name,i)=>{const v=$ (manualIds[i]).value;out.push(name+'：'+v+(v==='未测'?'':'（用户自报）'));});
+ out.push('','边界：仅代表本次设备、网络与时间；不代表全国所有网络均通过。',
+ '资源通过仅表示下载内容与本站发布清单一致，不等于学习功能、离线音频或跨设备同步全部通过。',
+ '报告未自动上传，不含学习记录。');
+ $('report').value=out.join('\n');
+}
+function invalidate(){
+ if(busy){envChanged=true;return;}
+ if(full){full.stale=true;fullPanel('stale','环境或联网状态已变化，请重新检测','保留上次报告供对照，不把旧结果当作当前结果。');$('manualFields').disabled=true;}
+ report();
+}
+function freshURL(value){const u=new URL(value,base);u.searchParams.set('network_check',Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));return u.href;}
+async function download(value,limit,ms,parent){
+ let timer,listener,reader,done=false;
+ const controller=typeof AbortController==='function'?new AbortController():null;
+ const stopped=new Promise((_,reject)=>{
+  listener=()=>{if(done)return;reject(new Error('cancelled'));if(controller)controller.abort();if(reader)reader.cancel().catch(()=>{});};
+  timer=setTimeout(()=>{if(done)return;reject(new Error('timeout'));if(controller)controller.abort();if(reader)reader.cancel().catch(()=>{});},ms);
+  if(parent){parent.addEventListener('abort',listener,{once:true});if(parent.aborted)listener();}
+ });
+ try{return await Promise.race([stopped,(async()=>{
+  if(parent&&parent.aborted)throw new Error('cancelled');
+  const response=await fetch(freshURL(value),{cache:'no-store',credentials:'omit',redirect:'error',...(controller?{signal:controller.signal}:{})});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  if(response.url&&new URL(response.url).origin!==base.origin)throw new Error('scope');
+  if(response.body&&response.body.getReader){
+   reader=response.body.getReader();const chunks=[];let size=0;
+   while(true){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>limit){reader.cancel().catch(()=>{});throw new Error('size');}chunks.push(part.value);}
+   const bytes=new Uint8Array(size);let pos=0;for(const chunk of chunks){bytes.set(chunk,pos);pos+=chunk.byteLength;}return bytes;
   }
-  retry.addEventListener('click',check);
-  check();
+  const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.byteLength>limit)throw new Error('size');return bytes;
+ })()]);}
+ finally{done=true;clearTimeout(timer);if(parent)parent.removeEventListener('abort',listener);}
+}
+async function quickCheck(){
+ if(busy)return;invalidate();lock(true);envChanged=false;
+ panel('waiting','正在检测当前网络…','正在请求新的站点信息，不把离线缓存当作联网成功。');
+ try{
+  const bytes=await download('manifest.webmanifest',65536,12000);
+  const m=JSON.parse(new TextDecoder().decode(bytes));
+  if(m.id!==base.pathname||m.name!=='江苏初中英语学习站'||m.start_url!=='./#home')throw new Error('manifest');
+  quick={title:'通过',at:time()};panel('pass','当前网络已连上学习站',quick.at+'。已收到本站信息；完整课程请继续检测。');
+ }catch(e){quick={title:'未能确认联网：'+reason(e),at:time()};panel('fail','本次未能确认联网',quick.at+'。'+reason(e)+'。已保存的离线课程仍可尝试使用。');}
+ finally{lock(false);report();}
+}
+function parseBuild(text){
+ const found=/^const BUILD = (\{[^\r\n]*\});\r?$/m.exec(text);
+ if(!found)throw new Error('manifest');
+ const b=JSON.parse(found[1]);
+ if(!b||typeof b.version!=='string'||!/^\d+\.\d+\.\d+[a-zA-Z0-9._-]*$/.test(b.version)||b.version.length>64||typeof b.id!=='string'||!/^[-a-zA-Z0-9._]{1,120}$/.test(b.id)||!Array.isArray(b.assets)||!b.assets.length||b.assets.length>200)throw new Error('manifest');
+ const seen=new Set();let total=0;
+ for(const a of b.assets){
+  if(!a||typeof a.url!=='string'||!Number.isSafeInteger(a.bytes)||a.bytes<1||a.bytes>4194304||typeof a.sha256!=='string'||! /^[0-9a-f]{64}$/.test(a.sha256))throw new Error('manifest');
+  if(!/^(?:\.\/|[a-zA-Z0-9][a-zA-Z0-9_./-]*(?:\?v=[a-zA-Z0-9_.-]+)?)$/.test(a.url))throw new Error('scope');
+  const u=new URL(a.url,base);
+  if(u.origin!==base.origin||!u.pathname.startsWith(base.pathname)||u.username||u.password||seen.has(u.href))throw new Error('scope');
+  seen.add(u.href);total+=a.bytes;
+ }
+ if(total!==b.bytes||total>20971520)throw new Error('manifest');return b;
+}
+async function fullCheck(){
+ if(busy)return;
+ manualIds.forEach(id=>$(id).value='未测');
+ full={env:environment(),started:time(),version:'',build:'',rows:[],title:'检测中',stale:false};envChanged=false;
+ $('assetRows').replaceChildren();lock(true);fullPanel('running','正在读取发布清单…','不改动学习记录；切换网络后需重新检测。');report();
+ let timer;const group=typeof AbortController==='function'?new AbortController():null;
+ try{
+  if(!window.crypto||!crypto.subtle||!group||typeof TextDecoder!=='function'){
+   full.title='未核对：当前浏览器缺少内容校验能力';fullPanel('unsupported',full.title,'请换用支持的现代 HTTPS 浏览器；这不表示网站打不开。');return;
+  }
+  timer=setTimeout(()=>group.abort(),90000);
+  const b=parseBuild(new TextDecoder().decode(await download('sw.js',262144,20000,group.signal)));
+  full.version=b.version;full.build=b.id;
+  const nodes=b.assets.map(a=>{const n=document.createElement('div');n.className='resource';n.dataset.state='pending';n.textContent=a.url+' · 等待核对';$('assetRows').appendChild(n);return n;});
+  full.rows=b.assets.map(a=>({name:a.url,state:'pending',detail:'尚未完成'}));let next=0,completed=0;
+  const worker=async()=>{
+   while(next<b.assets.length){
+    const i=next++,a=b.assets[i],row=full.rows[i],start=performance.now();
+    try{
+     const bytes=await download(a.url,a.bytes,20000,group.signal);
+     if(bytes.byteLength!==a.bytes)throw new Error('size');
+     const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(n=>n.toString(16).padStart(2,'0')).join('');
+     if(hash!==a.sha256)throw new Error('hash');
+     row.state='pass';row.detail='长度与 SHA-256 一致 · '+Math.round(performance.now()-start)+' ms';
+    }catch(e){row.state='fail';row.detail=reason(e);}
+    nodes[i].dataset.state=row.state;nodes[i].textContent=(row.state==='pass'?'通过 · ':'未通过 · ')+a.url+' · '+row.detail;
+    completed++;fullPanel('running','已检查 '+completed+' / '+b.assets.length,'此时间包含下载和校验，不是专业测速或带宽测量。');
+   }
+  };
+  await Promise.all(Array.from({length:Math.min(3,b.assets.length)},worker));
+  const passed=full.rows.filter(r=>r.state==='pass').length;
+  full.title=passed===b.assets.length?'资源核对通过：'+passed+' / '+b.assets.length:'资源未全部通过：'+passed+' / '+b.assets.length;
+  fullPanel(passed===b.assets.length?'pass':'fail',full.title,passed===b.assets.length?'本次下载与 V'+b.version+' 发布清单一致。下一步请实际练习，不能据此宣布全国全网通过。':'请展开逐项结果并复制报告。可能是网络问题或发布中，失败原因需进一步核实。');
+ }catch(e){full.title='完整检测未完成：'+reason(e);fullPanel('fail',full.title,'请稍后重新检测。保存过的课程仍可使用原离线入口。');}
+ finally{
+  clearTimeout(timer);full.finished=time();lock(false);
+  if(envChanged){full.stale=true;fullPanel('stale','检测期间网络状态发生变化，请重测','结果仍保留在报告中，但不代表单一稳定的网络环境。');$('manualFields').disabled=true;}
+  report();
+ }
+}
+$('retry').addEventListener('click',quickCheck);$('fullCheck').addEventListener('click',fullCheck);
+envIds.forEach(id=>$(id).addEventListener('change',invalidate));manualIds.forEach(id=>$(id).addEventListener('change',report));
+window.addEventListener('online',invalidate);window.addEventListener('offline',invalidate);
+$('copyReport').addEventListener('click',async()=>{
+ try{if(!navigator.clipboard||!navigator.clipboard.writeText)throw new Error();await navigator.clipboard.writeText($('report').value);$('copyStatus').textContent='已复制报告，请自行粘贴发送。';}
+ catch(_){$('report').focus();$('report').select();$('copyStatus').textContent='未能自动复制，请在报告框长按复制，或使用电脑 Ctrl+C。';}
+});
+$('downloadReport').addEventListener('click',()=>{
+ try{const u=URL.createObjectURL(new Blob(['\ufeff'+$('report').value],{type:'text/plain;charset=utf-8'})),a=document.createElement('a');a.href=u;a.download='英语学习站_网络检测_'+new Date().toISOString().replace(/[:.]/g,'-')+'.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),10000);$('copyStatus').textContent='已请求下载，请确认文件已保存；微信不能下载时可长按复制报告。';}
+ catch(_){$('copyStatus').textContent='当前浏览器不能下载，请在报告框长按复制。';}
+});
+report();quickCheck();
 })();
 </script></body></html>
