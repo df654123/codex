@@ -1,0 +1,19 @@
+name: First week learning acceptance
+on:
+  push:
+    branches: [week-pilot-acceptance]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  published-site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check vocabulary, writing, calendar gates, backup, and offline restart
+        run: python3 qa/pilot_test.py
+      - name: Check existing mobile and offline learning
+        run: python3 qa/mobile_offline.py
