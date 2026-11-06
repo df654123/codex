@@ -1,0 +1,17 @@
+name: Mobile offline acceptance
+on:
+  push:
+    branches: [mobile-offline-check]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobile-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Cold-start the live learning site offline and retain a word review
+        run: python3 qa/mobile_offline.py
