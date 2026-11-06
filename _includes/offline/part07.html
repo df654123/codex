@@ -584,6 +584,7 @@ window.ENGLISH_EXERCISES = {"groups": [{"id": "listening", "sourceCardTitle": "å
     navButtons.forEach(b => b.classList.toggle('active', b.dataset.view === id));
     window.scrollTo({top:0,behavior:'instant'});
     if(id==='offline')document.getElementById('offlinePageTitle').focus({preventScroll:true});
+    if(id==='week' && window.WeekPilot)window.WeekPilot.render();
     if(id==='readwrite' && window.RWApp)window.RWApp.render();
     if(id==='growth' && window.RWStore)renderReadWriteGrowth();
   }

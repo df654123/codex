@@ -1,5 +1,6 @@
 {% raw %}  </section>
 
+      <section class="view" id="week" aria-label="第一周试学"><div id="weekPilotRoot"></div></section>
       <section class="view" id="words" aria-label="词汇积累"><div id="wordMemoryRoot"></div><details id="legacyWordPractice" class="wm-legacy"><summary>原有单元即时练习与旧记录</summary><p>这里保留原来的词卡与拼写记录。新的长期复习计划在上方“今日复习”，两部分记录均可随整站备份保存。</p><div id="wordStudyRoot"></div></details></section>
       <section class="view" id="literacy" aria-label="学以致用"><div id="literacyRoot"></div></section>
       <section class="view" id="exam" aria-label="能力训练"><section class="cl-home-link"><div><strong>中考读写专项</strong><p>按教材册别选一套原创任务，练阅读理解、简答和写作修改。</p></div><button type="button" class="primary-btn" data-go="readwrite">进入读写专项 →</button></section><div id="examPathRoot"></div></section>
@@ -270,6 +271,11 @@
       </section>
       <section class="view" id="parent">
         <div class="unit-banner"><div><span class="chip">GROW TOGETHER</span><h2>陪伴，比催促更有力量</h2><p>先看见孩子实际完成了什么，再聊聊哪里需要帮助。</p></div><button class="outline-btn" onclick="exportSiteSnapshot()">备份记录</button></div>
+        <section class="card" style="margin-top:16px" aria-label="一周试学记录">
+          <h3>从本周的词汇和作品看学习</h3>
+          <p>一起看孩子隔天能否回想、本周写了什么，再商量下周先复习哪几个词。</p>
+          <button class="outline-btn" type="button" data-go="week" id="weekPilotParentEntry">查看第一周试学记录</button>
+        </section>
         <div class="stats" id="parentStats" style="margin-top:20px"></div>
         <div class="grid-2 growth-panels"><div class="card"><h4>最近一次学习</h4><div id="parentSummary"></div></div><div class="card"><h4>今晚可以这样聊</h4><p class="quote">“今天学到的哪一句英语，你想说给我听？”</p><p>让孩子展示一个具体收获，再一起讨论遇到的困难。</p></div></div>
         <div class="parent-form-grid">          <section class="beta-panel">
@@ -323,7 +329,7 @@
       <section class="view" id="beta">
         <div class="unit-banner beta-banner">
           <div>
-            <span class="chip">Family Beta Lab · V4.1.1</span>
+            <span class="chip">Family Beta Lab · V4.2.0</span>
             <h2>家庭自用验证中心</h2>
             <p style="color:var(--muted)">
               先记录真实问题，再决定开发什么。所有内测数据目前只保存在这台设备的浏览器中。
@@ -532,7 +538,7 @@
       <section class="view" id="iteration">
         <div class="unit-banner iteration-banner">
           <div>
-            <span class="chip">Iteration Control · V4.1.1</span>
+            <span class="chip">Iteration Control · V4.2.0</span>
             <h2>内测迭代管理中心</h2>
             <p style="color:var(--muted)">
               保存证据、确认问题、记录修复、安排复测。这里记录当前浏览器的试用证据；试用检查不是网站部署状态，也不是其他家庭的使用统计。
@@ -645,7 +651,7 @@
             <div class="release-form">
               <label>
                 候选版本号
-                <input id="releaseVersionInput" type="text" value="V4.1.1" maxlength="20">
+                <input id="releaseVersionInput" type="text" value="V4.2.0" maxlength="20">
               </label>
               <label>
                 本版主要修改

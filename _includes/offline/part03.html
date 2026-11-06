@@ -96,6 +96,10 @@
 .lit-recovery{margin:16px 0;padding:16px;border:1px solid #e8c9ad;background:#fff7ec;border-radius:12px}.lit-recovery h4{margin:0 0 9px;font-size:14px;color:#7d4d29}.lit-recovery p{font-size:12px;line-height:1.8;color:#805a3e;margin:7px 0}
 
 </style>
+<style data-bundled-href="pilot.css">
+#weekPilotRoot{--wp-ink:#183c32;--wp-green:#145b48;--wp-muted:#415f55;color:var(--wp-ink);max-width:850px;margin:0 auto 48px;font-size:16px;line-height:1.65}#weekPilotRoot *{box-sizing:border-box}#weekPilotRoot .wp-card{background:white;border:1px solid #cadbd2;border-radius:18px;padding:clamp(16px,4vw,30px);margin:14px 0}#weekPilotRoot .wp-head{background:#eaf4ed;border-color:#bed5c6}#weekPilotRoot h2,#weekPilotRoot h3,#weekPilotRoot p{margin:.3em 0 .65em}#weekPilotRoot h2{font-size:clamp(1.55rem,5vw,2.1rem);line-height:1.28}#weekPilotRoot h3{font-size:1.24rem}#weekPilotRoot .wp-kicker{font-size:.83rem;font-weight:700;letter-spacing:.07em;color:#3c6c57}#weekPilotRoot .wp-small{font-size:.91em;color:var(--wp-muted)}#weekPilotRoot label.wp-field{display:block;font-weight:650;margin:12px 0 4px}#weekPilotRoot select,#weekPilotRoot input[type=text],#weekPilotRoot textarea{padding:10px 12px;width:100%;border:1px solid #8ea99b;border-radius:9px;background:white;color:#183c32;font:inherit}#weekPilotRoot textarea{min-height:85px;resize:vertical}#weekPilotRoot button{border:1px solid #829c8e;background:#fff;color:#204d3f;border-radius:9px;padding:9px 15px;font:inherit;font-weight:650;cursor:pointer;min-height:44px}#weekPilotRoot button.wp-primary,#weekPilotRoot button[aria-current=step]{background:var(--wp-green);color:white;border-color:var(--wp-green)}#weekPilotRoot :focus-visible{outline:3px solid #285fbd;outline-offset:3px}#weekPilotRoot .wp-days{display:flex;gap:7px;flex-wrap:wrap}#weekPilotRoot .wp-days button{padding:6px 12px;font-size:.94rem}#weekPilotRoot .wp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}#weekPilotRoot .wp-reading{padding:14px 18px;border-left:4px solid #678d70;background:#f2f7f1;font-size:1.07em}#weekPilotRoot .wp-note{padding:10px 14px;background:#faf3dc;border-radius:7px}#weekPilotRoot .wp-work{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 14px;background:#f3f7f4;border-radius:9px}#weekPilotRoot summary{font-weight:750;cursor:pointer;padding:4px 0}#weekPilotRoot .wp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:9px}#weekPilotRoot .wp-grid>div{padding:11px;background:#f2f7f3;border-radius:8px}#weekPilotRoot .wp-grid b,#weekPilotRoot .wp-grid small{display:block}#weekPilotRoot .wp-result{border-bottom:1px solid #e1e8e1;padding:8px 0}#weekPilotRoot [hidden]{display:none!important}
+
+</style>
 </head>
 <body>
 <section id="startupPanel" role="status" aria-live="polite"><h1 id="startupTitle">正在打开独立学习文件…</h1><p id="startupDetail">课程和功能已经包含在此文件中，无需互联网。请使用支持 JavaScript 的现代浏览器打开。</p><button type="button" onclick="location.reload()">重新打开文件</button><small>请从浏览器打开完整的 HTML 文件，不要只用聊天软件或文件管理器的预览窗口。</small><noscript><p>请启用浏览器的 JavaScript 后重新打开。</p></noscript></section>
@@ -133,6 +137,7 @@
 
       <nav class="nav" aria-label="网站主导航">
         <button class="active" data-view="home">🏠 首页</button>
+        <button data-view="week">📅 第一周试学</button>
         <button data-view="today">✅ 今日任务</button>
         <button data-view="exam">🧭 能力训练</button>
         <button data-view="readwrite">✍ 中考读写专项</button>
@@ -156,6 +161,12 @@
 
     <main id="mainContent" tabindex="-1">
       <section class="view active" id="home">
+        <section class="card" aria-labelledby="weekPilotHomeTitle" style="margin:0 0 16px">
+          <span class="home-tag">七年级上册 · 一周试学</span>
+          <h3 id="weekPilotHomeTitle">跟着本周单元，练会几个词</h3>
+          <p>选学校正在学的单元，今天试一试，隔天再回想；周末看看哪些词能自己写出并用在句子里。</p>
+          <button type="button" id="weekPilotHomeEntry" class="primary-btn" data-go="week">进入第一周试学</button>
+        </section>
         <div class="home-welcome">
           <div class="welcome-copy">
             <div class="home-date" id="homeDate">今天</div>
@@ -386,7 +397,7 @@
         <div id="offlineHomeSlot">
         <section class="distribution-card" aria-labelledby="distributionTitle">
           <div class="distribution-copy">
-            <span class="home-tag">独立学习版 · V4.1.1</span>
+            <span class="home-tag">独立学习版 · V4.2</span>
             <h3 id="distributionTitle" tabindex="-1">课程已在这里，随时开始学习</h3>
             <p>全部课程与导读已包含在此文件中。无需登录 GPT，也不需连接外部服务，就能阅读、做题和写笔记。</p>
             <details>
@@ -394,7 +405,7 @@
               <p>记录保存在打开此文件的浏览器中。移动或重命名文件、换浏览器、清理浏览器数据可能影响记录，请先备份。网页版与下载版的记录不会自动同步；可到“备份与版本管理”恢复已导出的记录。</p>
               <p>朗读仅使用可用的本机英语语音；没有音色或播放失败时可看文本练习。录音需浏览器支持及麦克风许可，手机局域网普通 HTTP 页面可能无法录音。外部原著与教材链接仍需联网。</p>
               <p>电脑可直接用浏览器打开本文件。完整包的局域网方式还可供同一 Wi-Fi 中的手机访问；服务器电脑需保持运行。浏览器记录按访问入口分别保存，换入口前请备份。</p>
-              <p>这是 V4.1.1 的课程快照。需要新内容时打开网页版并重新下载，更新前先备份。</p>
+              <p>这是 V4.2 的课程快照。需要新内容时打开网页版并重新下载，更新前先备份。</p>
             </details>
             <details class="third-party-notices"><summary>开源组件与许可</summary><p>ts-fsrs 5.4.2 · Open Spaced Repetition · MIT License</p><pre data-license-for="ts-fsrs" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.7">MIT License
 

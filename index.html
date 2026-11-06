@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#356a62" />
-  <meta name="app-version" content="4.1.1" />
+  <meta name="app-version" content="4.2.0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="AI英语成长空间" />
@@ -1158,6 +1158,7 @@
   <link rel="stylesheet" href="textbook-alignment.css?v=4.1.1">
 <link rel="stylesheet" href="review.css?v=4.1.1">
 <link rel="stylesheet" href="literacy.css?v=4.1.1">
+<link rel="stylesheet" href="pilot.css?v=4.2.0">
 </head>
 <body>
 <section id="startupPanel" role="status" aria-live="polite"><h1 id="startupTitle">正在准备英语学习内容…</h1><p id="startupDetail">首次打开需要加载课程。稍后即可学习；已下载的独立学习文件可以直接离线打开。</p><button type="button" onclick="location.reload()">重新载入页面</button><a href="downloads/jiangsu-english-offline.html" download="jiangsu-english-offline.html">下载独立学习文件</a><small>当前网址首次访问需要可用网络。已有文件可通过 U 盘或文件传输取得；无需先打开本站。</small><noscript><p>请使用启用了 JavaScript 的现代浏览器打开学习文件。部分聊天软件或文件预览器无法运行学习功能。</p></noscript></section>
@@ -1195,6 +1196,7 @@
 
       <nav class="nav" aria-label="网站主导航">
         <button class="active" data-view="home">🏠 首页</button>
+        <button data-view="week">📅 第一周试学</button>
         <button data-view="today">✅ 今日任务</button>
         <button data-view="exam">🧭 能力训练</button>
         <button data-view="readwrite">✍ 中考读写专项</button>
@@ -1218,6 +1220,12 @@
 
     <main id="mainContent" tabindex="-1">
       <section class="view active" id="home">
+        <section class="card" aria-labelledby="weekPilotHomeTitle" style="margin:0 0 16px">
+          <span class="home-tag">七年级上册 · 一周试学</span>
+          <h3 id="weekPilotHomeTitle">跟着本周单元，练会几个词</h3>
+          <p>选学校正在学的单元，今天试一试，隔天再回想；周末看看哪些词能自己写出并用在句子里。</p>
+          <button type="button" id="weekPilotHomeEntry" class="primary-btn" data-go="week">进入第一周试学</button>
+        </section>
         <div class="home-welcome">
           <div class="welcome-copy">
             <div class="home-date" id="homeDate">今天</div>
@@ -1501,6 +1509,7 @@
         </nav>
       </section>
 
+      <section class="view" id="week" aria-label="第一周试学"><div id="weekPilotRoot"></div></section>
       <section class="view" id="words" aria-label="词汇积累"><div id="wordMemoryRoot"></div><details id="legacyWordPractice" class="wm-legacy"><summary>原有单元即时练习与旧记录</summary><p>这里保留原来的词卡与拼写记录。新的长期复习计划在上方“今日复习”，两部分记录均可随整站备份保存。</p><div id="wordStudyRoot"></div></details></section>
       <section class="view" id="literacy" aria-label="学以致用"><div id="literacyRoot"></div></section>
       <section class="view" id="exam" aria-label="能力训练"><section class="cl-home-link"><div><strong>中考读写专项</strong><p>按教材册别选一套原创任务，练阅读理解、简答和写作修改。</p></div><button type="button" class="primary-btn" data-go="readwrite">进入读写专项 →</button></section><div id="examPathRoot"></div></section>
@@ -1771,6 +1780,11 @@
       </section>
       <section class="view" id="parent">
         <div class="unit-banner"><div><span class="chip">GROW TOGETHER</span><h2>陪伴，比催促更有力量</h2><p>先看见孩子实际完成了什么，再聊聊哪里需要帮助。</p></div><button class="outline-btn" onclick="exportSiteSnapshot()">备份记录</button></div>
+        <section class="card" style="margin-top:16px" aria-label="一周试学记录">
+          <h3>从本周的词汇和作品看学习</h3>
+          <p>一起看孩子隔天能否回想、本周写了什么，再商量下周先复习哪几个词。</p>
+          <button class="outline-btn" type="button" data-go="week" id="weekPilotParentEntry">查看第一周试学记录</button>
+        </section>
         <div class="stats" id="parentStats" style="margin-top:20px"></div>
         <div class="grid-2 growth-panels"><div class="card"><h4>最近一次学习</h4><div id="parentSummary"></div></div><div class="card"><h4>今晚可以这样聊</h4><p class="quote">“今天学到的哪一句英语，你想说给我听？”</p><p>让孩子展示一个具体收获，再一起讨论遇到的困难。</p></div></div>
         <div class="parent-form-grid">          <section class="beta-panel">
@@ -1824,7 +1838,7 @@
       <section class="view" id="beta">
         <div class="unit-banner beta-banner">
           <div>
-            <span class="chip">Family Beta Lab · V4.1.1</span>
+            <span class="chip">Family Beta Lab · V4.2.0</span>
             <h2>家庭自用验证中心</h2>
             <p style="color:var(--muted)">
               先记录真实问题，再决定开发什么。所有内测数据目前只保存在这台设备的浏览器中。
@@ -2033,7 +2047,7 @@
       <section class="view" id="iteration">
         <div class="unit-banner iteration-banner">
           <div>
-            <span class="chip">Iteration Control · V4.1.1</span>
+            <span class="chip">Iteration Control · V4.2.0</span>
             <h2>内测迭代管理中心</h2>
             <p style="color:var(--muted)">
               保存证据、确认问题、记录修复、安排复测。这里记录当前浏览器的试用证据；试用检查不是网站部署状态，也不是其他家庭的使用统计。
@@ -2146,7 +2160,7 @@
             <div class="release-form">
               <label>
                 候选版本号
-                <input id="releaseVersionInput" type="text" value="V4.1.1" maxlength="20">
+                <input id="releaseVersionInput" type="text" value="V4.2.0" maxlength="20">
               </label>
               <label>
                 本版主要修改
@@ -2557,6 +2571,7 @@
     navButtons.forEach(b => b.classList.toggle('active', b.dataset.view === id));
     window.scrollTo({top:0,behavior:'instant'});
     if(id==='offline')document.getElementById('offlinePageTitle').focus({preventScroll:true});
+    if(id==='week' && window.WeekPilot)window.WeekPilot.render();
     if(id==='readwrite' && window.RWApp)window.RWApp.render();
     if(id==='growth' && window.RWStore)renderReadWriteGrowth();
   }
@@ -3190,7 +3205,7 @@
   const ACTIVE_LEARNING_SESSION_KEY='englishActiveLearningSessionV22';
   const BETA_VERSION='2.2';
   const VIEW_NAMES={
-    home:'首页',offline:'离线学习',today:'今日任务',exam:'能力训练',readwrite:'中考读写专项',course:'译林同步课堂',words:'词汇积累',literacy:'学以致用',reading:'课外阅读',classics:'连云港书目',
+    home:'首页',offline:'离线学习',week:'第一周试学',today:'今日任务',exam:'能力训练',readwrite:'中考读写专项',course:'译林同步课堂',words:'词汇积累',literacy:'学以致用',reading:'课外阅读',classics:'连云港书目',
     speaking:'听力与口语',assessment:'基础练习',growth:'成长档案',
     parent:'家长中心',beta:'内测中心',iteration:'迭代管理'
   };
@@ -4167,11 +4182,12 @@
     return {
       schema:'ai-english-growth-space-snapshot',
       schemaVersion:1,
-      appVersion:'V4.1.1',
+      appVersion:'V4.2.0',
       learningState:window.LearningApp?LearningApp.snapshot():null,
       curriculumState:window.Curriculum?Curriculum.snapshot():null,
       classicsState:window.Classics?Classics.snapshot():null,
       wordStudyState:window.WordStudy?WordStudy.snapshot():null,
+      weekPilotState:window.WeekPilot?WeekPilot.snapshot():null,
       wordMemoryState:window.WordMemory?WordMemory.snapshot():null,
       literacyState:window.Literacy?Literacy.snapshot():null,
       readWriteState:window.RWStore?RWStore.snapshot():null,
@@ -4251,6 +4267,7 @@
     if(snapshot.classicsState!==undefined && snapshot.classicsState!==null)ClassicsCore.validate(snapshot.classicsState);
     if(snapshot.wordStudyState!==undefined && snapshot.wordStudyState!==null)WordStudyCore.validate(snapshot.wordStudyState);
     if(snapshot.wordMemoryState!==undefined && snapshot.wordMemoryState!==null)WordMemoryCore.validate(snapshot.wordMemoryState);
+    if(snapshot.weekPilotState!=null)WeekPilot.validate(snapshot.weekPilotState);
     if(snapshot.readWriteState!=null)RWStore.validate(snapshot.readWriteState);
     if(snapshot.literacyState!==undefined && snapshot.literacyState!==null)LiteracyCore.validate(snapshot.literacyState);
     if(snapshot.literacyConflictEvidence!==undefined && snapshot.literacyConflictEvidence!==null)validateLiteracyConflictEvidence(snapshot.literacyConflictEvidence);
@@ -4317,7 +4334,7 @@
         const snapshot=JSON.parse(reader.result);
         validateSiteSnapshot(snapshot);
         const confirmed=window.confirm(
-          `请先关闭其他打开的本站页面。将恢复${snapshot.exportedAt?new Date(snapshot.exportedAt).toLocaleString('zh-CN'):'未知时间'}的快照，覆盖其中包含的本机记录。旧快照没有的词汇积累、作品档案及中考读写记录会保留。是否继续？`
+          `请先关闭其他打开的本站页面。将恢复${snapshot.exportedAt?new Date(snapshot.exportedAt).toLocaleString('zh-CN'):'未知时间'}的快照，覆盖其中包含的本机记录。旧快照没有的词汇积累、作品档案、中考读写及第一周试学记录会保留。是否继续？`
         );
         if(!confirmed) return;
         const settings=snapshot.localSettings;
@@ -4336,6 +4353,7 @@
           ...(snapshot.classicsState?[['englishClassicsStateV31',JSON.stringify(ClassicsCore.normalize(snapshot.classicsState))]]:[]),
           ...(snapshot.wordStudyState?[['englishWordStudyV35',JSON.stringify(WordStudyCore.normalize(snapshot.wordStudyState))]]:[]),
           ...(snapshot.wordMemoryState?[['englishWordMemoryV40',JSON.stringify(WordMemoryCore.normalize(snapshot.wordMemoryState))]]:[]),
+          ...(snapshot.weekPilotState!=null?[['englishWeekPilotV1',JSON.stringify(WeekPilot.validate(snapshot.weekPilotState))]]:[]),
           ...(snapshot.readWriteState?RWStore.entries(snapshot.readWriteState):[]),
           ...(snapshot.literacyState?[['englishLiteracyV40',JSON.stringify(LiteracyCore.normalize(snapshot.literacyState))]]:[]),
           ...(snapshot.literacyConflictEvidence?[['englishLiteracyConflictEvidenceV40',JSON.stringify(snapshot.literacyConflictEvidence)]]:[]),
@@ -4636,7 +4654,7 @@
   function exportIterationReport(){
     const gate=calculateReleaseGate();
     const report=[
-      '# AI英语成长空间｜V4.1.1迭代报告',
+      '# AI英语成长空间｜V4.2.0迭代报告',
       '',
       `- 导出时间：${new Date().toLocaleString('zh-CN')}`,
       `- 本机试用检查（非网站部署状态）：${gate.passed}/${gate.total}`,
@@ -4658,7 +4676,7 @@
       ...betaData.releases.map((r,i)=>`${i+1}. ${r.version}｜${r.summary}｜复测：${r.retest||'无'}`)
     ].join('\n');
     downloadText(
-      `AI英语成长空间_V4.1.1迭代报告_${EnglishCore.dayKey()}.md`,
+      `AI英语成长空间_V4.2.0迭代报告_${EnglishCore.dayKey()}.md`,
       report,
       'text/markdown;charset=utf-8'
     );
@@ -4712,6 +4730,8 @@
 <script src="rw-packs.js?v=4.1.1"></script>
 <script src="rw-store.js?v=4.1.1"></script>
 <script src="rw-app.js?v=4.1.1"></script>
+<script src="unit-packs.js?v=4.2.0"></script>
+<script src="pilot.js?v=4.2.0"></script>
 <script src="offline-app.js?v=4.1.1"></script>
 <script>
   function followLearningHistory(){
@@ -4730,6 +4750,8 @@
   document.querySelectorAll('[data-rw-recommend]').forEach(button=>button.addEventListener('click',()=>RWApp.open('rw-8b','writing')));
   if(document.getElementById('readwrite').classList.contains('active') && window.RWApp)RWApp.render();
   if(document.getElementById('growth').classList.contains('active') && window.RWStore)renderReadWriteGrowth();
+  if(document.getElementById('week').classList.contains('active') && window.WeekPilot)window.WeekPilot.render();
+  document.getElementById('weekPilotParentEntry').addEventListener('click',()=>{if(typeof window.WeekPilot?.showSummary==='function')WeekPilot.showSummary();});
   renderRestoredLiteracyConflicts();
   window.LearningStartup.complete();
 </script>

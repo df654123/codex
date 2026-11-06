@@ -34,6 +34,8 @@
   document.querySelectorAll('[data-rw-recommend]').forEach(button=>button.addEventListener('click',()=>RWApp.open('rw-8b','writing')));
   if(document.getElementById('readwrite').classList.contains('active') && window.RWApp)RWApp.render();
   if(document.getElementById('growth').classList.contains('active') && window.RWStore)renderReadWriteGrowth();
+  if(document.getElementById('week').classList.contains('active') && window.WeekPilot)window.WeekPilot.render();
+  document.getElementById('weekPilotParentEntry').addEventListener('click',()=>{if(typeof window.WeekPilot?.showSummary==='function')WeekPilot.showSummary();});
   renderRestoredLiteracyConflicts();
   window.LearningStartup.complete();
 </script>
