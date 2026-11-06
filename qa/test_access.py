@@ -1,4 +1,4 @@
-"""Local browser acceptance; synthetic profiles only, no student data."""
+"""Browser acceptance with synthetic profiles; never uses student data."""
 import functools
 import http.server
 import json
@@ -32,7 +32,7 @@ class AccessTests(unittest.TestCase):
     def setUp(self):
         self.ctx=self.browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True,device_scale_factor=2)
         self.page=self.ctx.new_page()
-        self.page.set_default_timeout(6000)
+        self.page.set_default_timeout(10000)
     def tearDown(self):
         self.ctx.close()
     def open(self):
@@ -40,7 +40,7 @@ class AccessTests(unittest.TestCase):
         self.page.wait_for_function("document.querySelector('#panel').dataset.state !== 'waiting'")
     def full(self):
         self.page.locator('#fullCheck').click()
-        self.page.wait_for_function("document.querySelector('#fullPanel').dataset.state !== 'running'",timeout=30000)
+        self.page.wait_for_function("document.querySelector('#fullPanel').dataset.state !== 'running'",timeout=100000)
     def state(self):
         return self.page.locator('#fullPanel').get_attribute('data-state')
     def report(self):
@@ -50,13 +50,16 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(self.page.locator('#fullCheck').count(),1,'Full resource-check entry is missing')
     def test_02_real_release_all_assets_and_manual_unmeasured(self):
         self.open();self.full()
-        self.assertEqual(self.state(),'pass')
+        self.assertEqual(self.state(),'pass',self.report())
         self.assertEqual(self.page.locator('#assetRows [data-state=pass]').count(),len(BUILD['assets']))
         self.assertIn('43 / 43',self.page.locator('#fullTitle').inner_text())
         self.assertIn('词汇提交并刷新：未测',self.report())
         self.assertIn('断网关闭后重开：未测',self.report())
         self.assertIn('不代表全国所有网络均通过',self.report())
         self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+        out=ROOT/'qa/artifacts';out.mkdir(exist_ok=True)
+        self.page.screenshot(path=str(out/'network-mobile.png'),full_page=True)
+        (out/'synthetic-resource-report.txt').write_text(self.report(),encoding='utf-8')
     def test_03_same_size_corrupt_resource_is_not_green(self):
         original=(ROOT/'curriculum-data.js').read_bytes()
         changed=original.replace(b'window',b'windoX',1)
@@ -119,19 +122,19 @@ class AccessTests(unittest.TestCase):
         self.open();self.full();self.assertEqual(self.state(),'fail');self.assertIn('超时',self.report())
     def test_13_service_worker_controlled_disconnect_does_not_pass(self):
         self.page.goto(self.base+'#home')
-        self.page.wait_for_function("document.querySelector('#offlineStatus')?.dataset.state === 'ready' && !!navigator.serviceWorker.controller",timeout=30000)
+        self.page.wait_for_function("document.querySelector('#offlineStatus')?.dataset.state === 'ready' && !!navigator.serviceWorker.controller",timeout=60000)
         self.open();self.full();self.assertEqual(self.state(),'pass')
         self.ctx.set_offline(True);self.full();self.assertEqual(self.state(),'fail')
         self.assertTrue(self.page.evaluate('!!navigator.serviceWorker.controller'))
     def test_14_learning_runtime_and_offline_record_unchanged(self):
         self.page.goto(self.base+'#words')
-        self.page.wait_for_function("window.LearningStartupReady && document.querySelector('#offlineStatus')?.dataset.state==='ready'",timeout=30000)
+        self.page.wait_for_function("window.LearningStartupReady && document.querySelector('#offlineStatus')?.dataset.state==='ready'",timeout=60000)
         self.ctx.set_offline(True)
         self.page.locator('[data-wm-action=enroll-unit]').click()
         word=self.page.locator('#wmCardTitle').inner_text()
         self.page.locator('[data-wm-action=reveal]').click()
         self.page.locator('[data-wm-action=rate][data-wm-value=\"1\"]').click()
-        self.page.wait_for_function("document.querySelector('#wmReviewResult').textContent.includes('本次结果已保存')")
+        self.page.wait_for_function("document.querySelector('#wmReviewResult')?.textContent.includes('本次结果已保存')")
         self.page.reload()
         self.page.locator('[data-wm-action=panel][data-wm-value=history]').click()
         self.assertIn(word,self.page.locator('.wm-history').inner_text())

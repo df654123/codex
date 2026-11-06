@@ -19,3 +19,10 @@ jobs:
         env:
           CHROME_BIN: /usr/bin/google-chrome
         run: python3 -m unittest qa.test_access -v
+      - name: Save synthetic diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: access-qa-evidence
+          path: qa/artifacts/
+          if-no-files-found: ignore
