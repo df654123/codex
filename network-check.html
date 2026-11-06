@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#155547">
+<title>手机联网检测 · 江苏初中英语学习站</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f7f4;color:#18342b;font:17px/1.65 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}main{width:min(100%,37rem);margin:8vh auto;padding:0 1.15rem 2rem}.eyebrow{display:block;color:#3c6758;font-size:.86rem;letter-spacing:.07em;font-weight:650}h1{font-size:clamp(1.7rem,6vw,2.3rem);margin:.45rem 0 .4rem;line-height:1.3}.lead{color:#425b52;margin:0 0 1.35rem}.card{background:#fff;border:1px solid #cddbd3;border-radius:1rem;padding:1.3rem}.card strong{display:block;font-size:1.3rem;line-height:1.45}.card p{margin:.4rem 0 0}.details{color:#50645b;font-size:.93rem}.card[data-state="pass"]{border-left:5px solid #1d7450}.card[data-state="fail"]{border-left:5px solid #9d5d25}.actions{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.15rem 0}.actions>*{flex:1;text-align:center;min-width:9rem;border-radius:.65rem;padding:.72rem .8rem;border:1px solid #276650;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}button{background:white;color:#245442}button:disabled{opacity:.65;cursor:wait}a{background:#185944;color:white}button:focus-visible,a:focus-visible{outline:3px solid #3267a2;outline-offset:3px}.tip{padding-top:.85rem;border-top:1px solid #d6e1da;color:#41554c;font-size:.94rem}.tip p{margin:.4rem 0}footer{font-size:.8rem;margin-top:1.3rem;color:#54685c}
+</style></head>
+<body><main>
+<span class="eyebrow">江苏初中英语学习站</span>
+<h1>这台手机能连上学习站吗？</h1>
+<p class="lead">关掉 Wi-Fi 测手机流量，连上 Wi-Fi 再测一次。两次都可以用这一页。</p>
+<section id="panel" class="card" aria-live="polite" aria-atomic="true" data-state="waiting">
+<strong id="status">正在检测当前网络…</strong><p id="detail" class="details">正在向学习站请求一份新的站点信息。</p>
+</section>
+<noscript><p>请在支持 JavaScript 的浏览器打开此页，才能检测网络和使用练习。</p></noscript>
+<div class="actions"><a href="./#home">进入学习站</a><button id="retry" type="button">重新检测</button></div>
+<div class="tip"><p><b>切换网络后：</b>等手机状态栏显示新的网络，再点「重新检测」。每次检测都会重新联网。</p>
+<p><b>想断网学习：</b>先进入学习站，等到显示「已可离线学习」。请用原来的浏览器继续学习，练习记录保存在那里。</p></div>
+<footer>无需登录。检测不读取或修改学习记录。</footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const el=id=>document.getElementById(id), panel=el('panel'), status=el('status'), detail=el('detail'), retry=el('retry');
+  function show(state,title,message){panel.dataset.state=state;status.textContent=title;detail.textContent=message;}
+  async function check(){
+    if(retry.disabled)return;
+    retry.disabled=true;
+    show('waiting','正在检测当前网络…','正在向学习站请求一份新的站点信息。');
+    const stamp=()=>new Date().toLocaleTimeString('zh-CN',{hour12:false});
+    let timer;
+    const controller=typeof AbortController==='function'?new AbortController():null;
+    try {
+      const target=new URL('./manifest.webmanifest',location.href);
+      target.searchParams.set('network_check',Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+      const get=async()=>{
+        const res=await fetch(target.href,{cache:'no-store',credentials:'omit',redirect:'error',...(controller?{signal:controller.signal}:{})});
+        if(!res.ok)throw new Error('http');
+        const m=await res.json();
+        const sitePath=new URL('./',location.href).pathname;
+        if(m.id!==sitePath||m.name!=='江苏初中英语学习站'||m.start_url!=='./#home')throw new Error('content');
+      };
+      await Promise.race([get(),new Promise((_,reject)=>{timer=setTimeout(()=>{if(controller)controller.abort();reject(new Error('timeout'));},12000);})]);
+      show('pass','当前网络已连上学习站','检测时间 '+stamp()+'。已通过当前网络读到本站信息，可以进入学习。');
+    }catch(_){
+      show('fail','本次未能确认联网','检测时间 '+stamp()+'。请确认手机已连网后再试；若曾在这个浏览器保存课程，也可以直接进入学习站试用离线内容。');
+    }finally{clearTimeout(timer);retry.disabled=false;}
+  }
+  retry.addEventListener('click',check);
+  check();
+})();
+</script></body></html>
