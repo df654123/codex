@@ -87,9 +87,31 @@ def close():
 
 def button(selector):
     wait_js(f'document.querySelector({json.dumps(selector)})?.getClientRects().length > 0')
-    # Use WebDriver's element click; it performs the real input+scroll path.
-    e = cmd("POST", "/element", {"using": "css selector", "value": selector})
-    cmd("POST", "/element/" + e["element-6066-11e4-a52e-4f735466cecf"] + "/click", {})
+    # ChromeDriver's built-in click can return before a CSS smooth scroll lands.
+    # Scroll like a user, wait until the center stabilizes AND hit-tests to the
+    # real button. Do not invoke HTMLElement.click() or hide an overlay.
+    js("document.querySelector(arguments[0]).scrollIntoView({block:'center',inline:'center',behavior:'instant'})", selector)
+    prev = None
+    stop = time.monotonic() + 10
+    while time.monotonic() < stop:
+        info = js("""
+          const el=document.querySelector(arguments[0]); if(!el)return {missing:true};
+          const r=el.getBoundingClientRect(), x=Math.round((r.left+r.right)/2), y=Math.round((r.top+r.bottom)/2);
+          const hit=document.elementFromPoint(x,y), v=window.visualViewport;
+          return {x,y,hit:hit?.tagName+'#'+(hit?.id||'')+'.'+(hit?.className||''),
+            onTarget:!!hit && el.contains(hit) && !el.disabled,
+            visible:x>=0&&y>=0&&x<Math.min(innerWidth,v?.width??innerWidth)&&y<Math.min(innerHeight,v?.height??innerHeight),
+            view:[innerWidth,innerHeight,v?.width,v?.height,v?.scale],scroll:Math.round(scrollY),label:el.textContent.trim()};
+        """, selector)
+        xy=(info.get("x"), info.get("y"))
+        if info.get("onTarget") and info.get("visible") and xy == prev:
+            print("TAP verified visible button:", info, flush=True)
+            cdp("Input.dispatchTouchEvent", {"type":"touchStart", "touchPoints":[{"x":xy[0], "y":xy[1]}]})
+            cdp("Input.dispatchTouchEvent", {"type":"touchEnd", "touchPoints":[]})
+            return
+        prev=xy
+        time.sleep(.12)
+    raise RuntimeError(f"Button center blocked: {selector}: {info}")
 
 
 def test(profile, off_port):
@@ -100,6 +122,13 @@ def test(profile, off_port):
                "worker:navigator.serviceWorker.controller.scriptURL, width:innerWidth}")
     assert ready["width"] == 390 and ready["worker"] == ROOT + "sw.js", ready
     print("PASS online cache:", ready, flush=True)
+    cmd("POST", "/url", {"url":ROOT + "network-check.html"})
+    panel = "document.querySelector('#panel')?.dataset.state"
+    wait_js(panel + " === 'pass'")
+    cdp("Network.emulateNetworkConditions", {"offline":True,"latency":0,"downloadThroughput":0,"uploadThroughput":0})
+    button("#retry")
+    wait_js(panel + " === 'fail'", 22)
+    print("PASS network checker on same open page: online pass -> disconnected retry fail", flush=True)
     close()  # flushed profile; this tears down every tab, JS heap and SW process
     start(profile, off_port)
     cmd("POST", "/url", {"url": ROOT + "#words"})
