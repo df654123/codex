@@ -1,0 +1,54 @@
+name: Live access verification
+on:
+  push:
+    branches: [access-diagnostics-20261106]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify deployed diagnostic file
+        run: |
+          python3 - <<'PY'
+          import hashlib,time,urllib.request
+          url='https://df654123.github.io/codex/network-check.html'
+          expected='778c7a04442c6c43d24bff657f51f9526971de470748456e94392df92a534a4b'
+          for attempt in range(24):
+              try:
+                  request=urllib.request.Request(url+'?release_check='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                  with urllib.request.urlopen(request,timeout=15) as response:
+                      actual=hashlib.sha256(response.read()).hexdigest()
+                  if actual==expected:
+                      print('PASS published diagnostic SHA-256:',actual)
+                      break
+              except Exception as exc:
+                  print(type(exc).__name__)
+              time.sleep(4)
+          else:
+              raise SystemExit('Published checker did not match tested bytes')
+          PY
+      - name: Install test driver only
+        run: python3 -m pip install playwright==1.56.0
+      - name: Verify public resources, offline detection and retained word review
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+          ACCESS_TEST_URL: https://df654123.github.io/codex/
+        run: >-
+          python3 -m unittest -v
+          qa.test_access.AccessTests.test_02_real_release_all_assets_and_manual_unmeasured
+          qa.test_access.AccessTests.test_05_offline_retry_does_not_reuse_success
+          qa.test_access.AccessTests.test_13_service_worker_controlled_disconnect_does_not_pass
+          qa.test_access.AccessTests.test_14_learning_runtime_and_offline_record_unchanged
+      - name: Preserve synthetic public-site evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-access-evidence
+          path: qa/artifacts/
+          if-no-files-found: ignore
