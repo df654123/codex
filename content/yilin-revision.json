@@ -1,0 +1,422 @@
+{
+  "u1Order": {
+    "greet": 1,
+    "introduce": 2,
+    "each other": 3,
+    "go by": 4,
+    "glad": 5,
+    "same": 6,
+    "hobby": 7,
+    "grade": 8,
+    "classmate": 9,
+    "friendly": 10,
+    "full": 11,
+    "be full of": 12,
+    "energy": 13,
+    "be good at": 14,
+    "slim": 15,
+    "polite": 16,
+    "smart": 17,
+    "ready": 18,
+    "be ready to do sth.": 19,
+    "other": 20,
+    "interested": 21,
+    "be interested in": 22,
+    "looks": 23,
+    "character": 24,
+    "both": 25,
+    "enjoy": 26,
+    "pretty": 27,
+    "shy": 28,
+    "only": 29,
+    "stay": 30,
+    "match": 31,
+    "luck": 32,
+    "good luck": 33,
+    "chess": 34,
+    "Chinese chess": 35,
+    "problem": 36,
+    "weekend": 37,
+    "at the weekend": 38,
+    "fun": 39,
+    "make friends with": 40
+  },
+  "u2": [
+    {
+      "word": "jogging",
+      "partOfSpeech": "n.",
+      "meaning": "慢跑锻炼",
+      "example": "We go jogging in the park before breakfast.",
+      "displayOrder": 1,
+      "recognitionOnly": false
+    },
+    {
+      "word": "painting",
+      "partOfSpeech": "n.",
+      "meaning": "绘画；绘画作品",
+      "example": "Painting helps me notice the colours around me.",
+      "displayOrder": 2,
+      "recognitionOnly": false
+    },
+    {
+      "word": "paper-cutting",
+      "partOfSpeech": "n.",
+      "meaning": "剪纸艺术",
+      "example": "My grandmother shows me how to do paper-cutting.",
+      "displayOrder": 3,
+      "recognitionOnly": false
+    },
+    {
+      "word": "all kinds of",
+      "partOfSpeech": "phr.",
+      "meaning": "各种各样的",
+      "example": "Our club welcomes all kinds of ideas.",
+      "displayOrder": 4,
+      "recognitionOnly": false
+    },
+    {
+      "word": "fit",
+      "partOfSpeech": "adj.",
+      "meaning": "健康的；身体好的",
+      "example": "Walking to school helps me keep fit.",
+      "displayOrder": 5,
+      "recognitionOnly": false
+    },
+    {
+      "word": "around",
+      "partOfSpeech": "prep.",
+      "meaning": "围绕；在……周围",
+      "example": "We sit around the table and share our drawings.",
+      "displayOrder": 6,
+      "recognitionOnly": false
+    },
+    {
+      "word": "change",
+      "partOfSpeech": "v.",
+      "meaning": "改变；使发生变化",
+      "example": "A new hobby can change the way we spend our weekends.",
+      "displayOrder": 7,
+      "recognitionOnly": false
+    },
+    {
+      "word": "life",
+      "partOfSpeech": "n.",
+      "meaning": "生活；生命",
+      "example": "Music is an important part of her life.",
+      "displayOrder": 8,
+      "recognitionOnly": false
+    },
+    {
+      "word": "museum",
+      "partOfSpeech": "n.",
+      "meaning": "博物馆",
+      "example": "We visit a local museum to learn about old toys.",
+      "displayOrder": 9,
+      "recognitionOnly": false
+    },
+    {
+      "word": "thing",
+      "partOfSpeech": "n.",
+      "meaning": "东西；事情",
+      "example": "The first thing I draw is a leaf.",
+      "displayOrder": 10,
+      "recognitionOnly": false
+    },
+    {
+      "word": "fun",
+      "partOfSpeech": "n.",
+      "meaning": "乐趣；好玩的事",
+      "example": "We have fun making small paper boats.",
+      "displayOrder": 11,
+      "recognitionOnly": false
+    },
+    {
+      "word": "apart",
+      "partOfSpeech": "adv.",
+      "meaning": "分开",
+      "example": "Keep the two broken pieces apart.",
+      "displayOrder": 12,
+      "recognitionOnly": true
+    },
+    {
+      "word": "take ... apart",
+      "partOfSpeech": "phr.",
+      "meaning": "把……拆开",
+      "example": "We take the old clock apart to see how it works.",
+      "displayOrder": 13,
+      "recognitionOnly": false
+    },
+    {
+      "word": "fix",
+      "partOfSpeech": "v.",
+      "meaning": "修理；安装",
+      "example": "My uncle helps me fix my broken toy.",
+      "displayOrder": 14,
+      "recognitionOnly": false
+    },
+    {
+      "word": "endless",
+      "partOfSpeech": "adj.",
+      "meaning": "无穷无尽的",
+      "example": "The children seem to have endless questions about space.",
+      "displayOrder": 15,
+      "recognitionOnly": false
+    },
+    {
+      "word": "scientist",
+      "partOfSpeech": "n.",
+      "meaning": "科学家",
+      "example": "The scientist studies how plants grow in dry places.",
+      "displayOrder": 16,
+      "recognitionOnly": false
+    },
+    {
+      "word": "dream",
+      "partOfSpeech": "n.",
+      "meaning": "梦想；梦",
+      "example": "Her dream is to build a useful robot.",
+      "displayOrder": 17,
+      "recognitionOnly": false
+    },
+    {
+      "word": "true",
+      "partOfSpeech": "adj.",
+      "meaning": "真实的；确实的",
+      "example": "Is the story about the young inventor true?",
+      "displayOrder": 18,
+      "recognitionOnly": false
+    },
+    {
+      "word": "come true",
+      "partOfSpeech": "phr.",
+      "meaning": "实现；成为现实",
+      "example": "I work hard to help my dream come true.",
+      "displayOrder": 19,
+      "recognitionOnly": false
+    },
+    {
+      "word": "paint",
+      "partOfSpeech": "v.",
+      "meaning": "用颜料画；刷油漆",
+      "example": "I paint a green tree on the card.",
+      "displayOrder": 20,
+      "recognitionOnly": false
+    },
+    {
+      "word": "club",
+      "partOfSpeech": "n.",
+      "meaning": "社团；俱乐部",
+      "example": "Our school has a chess club.",
+      "displayOrder": 21,
+      "recognitionOnly": false
+    },
+    {
+      "word": "member",
+      "partOfSpeech": "n.",
+      "meaning": "成员",
+      "example": "Every member brings one idea to the meeting.",
+      "displayOrder": 22,
+      "recognitionOnly": false
+    },
+    {
+      "word": "geography",
+      "partOfSpeech": "n.",
+      "meaning": "地理学；地理课",
+      "example": "In geography we learn why places have different weather.",
+      "displayOrder": 23,
+      "recognitionOnly": false
+    },
+    {
+      "word": "p.m.",
+      "partOfSpeech": "abbr.",
+      "meaning": "下午；午后",
+      "example": "Our club meets at 4 p.m. on Thursday.",
+      "displayOrder": 24,
+      "recognitionOnly": false
+    },
+    {
+      "word": "volleyball",
+      "partOfSpeech": "n.",
+      "meaning": "排球运动",
+      "example": "We play volleyball after school.",
+      "displayOrder": 25,
+      "recognitionOnly": false
+    },
+    {
+      "word": "each",
+      "partOfSpeech": "det., pron. & adv.",
+      "meaning": "每个；各自",
+      "example": "Each member chooses a different colour.",
+      "displayOrder": 26,
+      "recognitionOnly": false
+    },
+    {
+      "word": "once",
+      "partOfSpeech": "adv.",
+      "meaning": "一次",
+      "example": "We meet once a week to share our work.",
+      "displayOrder": 27,
+      "recognitionOnly": false
+    },
+    {
+      "word": "join",
+      "partOfSpeech": "v.",
+      "meaning": "加入；和……一起参加",
+      "example": "May I join your art club?",
+      "displayOrder": 28,
+      "recognitionOnly": false
+    },
+    {
+      "word": "meeting",
+      "partOfSpeech": "n.",
+      "meaning": "会议；会面",
+      "example": "Our first meeting is in the library.",
+      "displayOrder": 29,
+      "recognitionOnly": false
+    },
+    {
+      "word": "sound",
+      "partOfSpeech": "linking v.",
+      "meaning": "听起来",
+      "example": "Your idea sounds interesting.",
+      "displayOrder": 30,
+      "recognitionOnly": false
+    },
+    {
+      "word": "plan",
+      "partOfSpeech": "v.",
+      "meaning": "计划；打算",
+      "example": "We plan to make a model bridge.",
+      "displayOrder": 31,
+      "recognitionOnly": false
+    },
+    {
+      "word": "questionnaire",
+      "partOfSpeech": "n.",
+      "meaning": "问卷；调查表",
+      "example": "Please complete this questionnaire about school clubs.",
+      "displayOrder": 32,
+      "recognitionOnly": true
+    },
+    {
+      "word": "role",
+      "partOfSpeech": "n.",
+      "meaning": "角色",
+      "example": "What role do you play in the school show?",
+      "displayOrder": 33,
+      "recognitionOnly": false
+    },
+    {
+      "word": "model",
+      "partOfSpeech": "n.",
+      "meaning": "模范；典型；模特儿",
+      "example": "Our coach is a model of patience.",
+      "displayOrder": 34,
+      "recognitionOnly": false
+    },
+    {
+      "word": "role model",
+      "partOfSpeech": "n.",
+      "meaning": "榜样；楷模",
+      "example": "My sister is my role model because she never gives up.",
+      "displayOrder": 35,
+      "recognitionOnly": false
+    },
+    {
+      "word": "design",
+      "partOfSpeech": "v.",
+      "meaning": "设计",
+      "example": "We design a poster for the reading club.",
+      "displayOrder": 36,
+      "recognitionOnly": false
+    },
+    {
+      "word": "skill",
+      "partOfSpeech": "n.",
+      "meaning": "技能；技艺",
+      "example": "Drawing faces is a skill I want to develop.",
+      "displayOrder": 37,
+      "recognitionOnly": false
+    },
+    {
+      "word": "artist",
+      "partOfSpeech": "n.",
+      "meaning": "艺术家；画家",
+      "example": "The artist draws birds by the river.",
+      "displayOrder": 38,
+      "recognitionOnly": false
+    },
+    {
+      "word": "master",
+      "partOfSpeech": "n.",
+      "meaning": "大师；能手",
+      "example": "The master teaches young artists to cut paper carefully.",
+      "displayOrder": 39,
+      "recognitionOnly": false
+    },
+    {
+      "word": "work",
+      "partOfSpeech": "n.",
+      "meaning": "作品",
+      "example": "We display our best works at the school art show.",
+      "displayOrder": 40,
+      "recognitionOnly": false
+    },
+    {
+      "word": "become",
+      "partOfSpeech": "linking v.",
+      "meaning": "成为；变得",
+      "example": "I hope to become a designer one day.",
+      "displayOrder": 41,
+      "recognitionOnly": false
+    },
+    {
+      "word": "designer",
+      "partOfSpeech": "n.",
+      "meaning": "设计师",
+      "example": "The designer makes bags from used cloth.",
+      "displayOrder": 42,
+      "recognitionOnly": false
+    },
+    {
+      "word": "would",
+      "partOfSpeech": "modal v.",
+      "meaning": "用于表达意愿等",
+      "example": "I would like to learn paper-cutting.",
+      "displayOrder": 43,
+      "recognitionOnly": false
+    },
+    {
+      "word": "would like",
+      "partOfSpeech": "phr.",
+      "meaning": "想要；愿意",
+      "example": "Would you like to visit our art room?",
+      "displayOrder": 44,
+      "recognitionOnly": false
+    },
+    {
+      "word": "future",
+      "partOfSpeech": "n.",
+      "meaning": "将来；未来",
+      "example": "What job would you like to do in the future?",
+      "displayOrder": 45,
+      "recognitionOnly": false
+    },
+    {
+      "word": "in the future",
+      "partOfSpeech": "phr.",
+      "meaning": "在将来",
+      "example": "I want to design useful tools in the future.",
+      "displayOrder": 46,
+      "recognitionOnly": false
+    },
+    {
+      "word": "hope",
+      "partOfSpeech": "v.",
+      "meaning": "希望",
+      "example": "We hope to share our paintings with more people.",
+      "displayOrder": 47,
+      "recognitionOnly": false
+    }
+  ]
+}

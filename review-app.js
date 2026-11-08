@@ -18,7 +18,7 @@
   const currentScope = () => scope === 'unit' ? unit().id : null;
 
   const raw = safeStore.get(KEY,null);
-  try { state = C.normalize(raw ? JSON.parse(raw) : null); }
+  try { state = C.syncCatalog(C.normalize(raw ? JSON.parse(raw) : null),catalog); }
   catch { state=C.createState();blockedRaw=raw||'';failed=true;notice='原有词汇积累记录暂时无法读取。先导出异常原记录；本页可以练习，新的记录暂保留在内存中。'; }
 
   function stored() {
@@ -43,7 +43,7 @@
   function persist() {
     if (window.restoringSnapshot || blockedRaw) { failed=true;return false; }
     try {
-      state=C.merge(state,stored());
+      state=C.syncCatalog(C.merge(state,stored()),catalog);
       const ok=safeStore.set(KEY,JSON.stringify(state));
       failed=!ok;
       return ok;
@@ -115,7 +115,7 @@
     if(mode==='meaning') {
       task=`<p class="wm-task-hint">看英文，回想它在句子中的意思</p><h3 id="wmCardTitle" tabindex="-1" lang="en">${esc(w.word)}</h3><label for="wmRecallInput">我的回忆 <span>可写中文关键词，也可先口头说出</span></label><input id="wmRecallInput" type="text" maxlength="300" value="${esc(p.input)}" placeholder="先回想，再查看答案"${p.revealed?' readonly':''}>${answer}${!p.revealed?button('我已回想，查看答案','reveal','','primary-btn'):''}`;
     } else {
-      task=`<p class="wm-task-hint">根据中文，独立写出英语单词或短语</p><h3 id="wmCardTitle" tabindex="-1">${esc(w.meaning)}</h3><form id="wmSpellingForm"><label for="wmSpellingInput">我的第一次拼写</label><input id="wmSpellingInput" type="text" maxlength="160" lang="en" autocomplete="off" autocapitalize="none" spellcheck="false" value="${esc(p.input)}" placeholder="写完后再检查"${p.revealed?' readonly':''}>${!p.revealed?'<button type="submit" class="primary-btn">检查拼写</button>':''}</form>${p.revealed?`<div class="wm-spelling-result ${p.correct?'is-correct':'needs-work'}" role="status"><strong>${p.correct?'本次第一次拼写正确':'这一次还没写对，先看清正确写法'}</strong><p>正确写法：<b lang="en">${esc(w.word)}</b></p><p>你的输入：<span lang="en">${esc(p.input)}</span></p><small>只记录第一次检查。看答案后的订正不覆盖这次结果。</small></div>`:''}${answer}`;
+      task=`<p class="wm-task-hint">根据中文，独立写出英语单词或短语</p><h3 id="wmCardTitle" tabindex="-1">${esc(w.meaning)}</h3><form id="wmSpellingForm"><label for="wmSpellingInput">我的第一次拼写</label><input id="wmSpellingInput" type="text" maxlength="160" lang="en" autocomplete="off" autocapitalize="none" spellcheck="false" value="${esc(p.input)}" placeholder="写完后再检查"${p.revealed?' readonly':''}>${!p.revealed?'<button type="submit" class="primary-btn">检查拼写</button>':''}</form>${p.revealed?`<div class="wm-spelling-result ${p.correct?'is-correct':'needs-work'}" role="status"><strong>${p.correct?'本次第一次拼写正确':'这一次还没写对，先看清正确写法'}</strong><p>正确写法：<b lang="en">${esc(w.word)}</b></p><p>你的输入：<span lang="en">${esc(p.input)}</span></p><p>${esc(p.spellingNote||'')}</p><small>只记录第一次检查。看答案后的订正不覆盖这次结果。</small></div>`:''}${answer}`;
     }
     const blocked=p.blocked?`<p class="wm-notice" role="status">今天本方式的新词额度已用完，当前输入已保留。明天可以继续新词，也可以先检查已到期的词。</p>${button('检查已到期词','restart')}`:'';
     const feedback = p.rated ? `<div id="wmReviewResult" class="wm-recorded" role="status"><strong>${failed?'本次结果保留在页面内存中':'本次结果已保存'}</strong><span>本方式下次复习：${date(p.due)}（北京时间）</span></div>${button(round.index+1===round.ids.length?'完成本轮':'下一词 →','next','','primary-btn')}` : p.revealed ? (mode==='meaning'?`<p class="wm-rating-note">按看答案前的第一次回忆选择。猜中、看过后才想起，请选“还没想起”。这是自评记录。</p><div class="wm-actions wm-rating">${button('还没想起 · 再学','rate','1','outline-btn',busy||p.blocked)}${button('自己想起了','rate','3','primary-btn',busy||p.blocked)}</div>`:`${button('记录第一次结果并安排复习','rate',p.correct?'3':'1','primary-btn',busy||p.blocked)}`) : '';
@@ -123,7 +123,7 @@
   }
   function libraryHtml() {
     const u=unit(), list=catalog.filter(w=>w.unitId===u.id);
-    return `<section class="wm-library"><div class="wm-section-heading"><div><h3>Unit ${u.number} · ${esc(u.title)}</h3><p>精选 ${list.length} 个主题词，放在例句里理解，再加入长期复习。</p></div>${button('加入本单元全部精选词','enroll-unit','','primary-btn')}</div><div class="wm-word-grid">${list.map(w=>`<article class="wm-word"><div><h4 lang="en">${esc(w.word)}</h4><span>${esc(w.meaning)}</span></div><p lang="en">${esc(w.example)}</p>${button(state.cards[w.id]?'已在我的词库':'加入复习','enroll',w.id,state.cards[w.id]?'wm-added':'outline-btn',!!state.cards[w.id])}</article>`).join('')}</div><div class="wm-context-link"><p>先读本单元语篇，再用两三个词完成自己的表达。</p><div class="wm-actions">${button('读本单元短文','read',u.id)}${button('完成主题任务','literacy','','primary-btn')}</div></div></section>`;
+    return `<section class="wm-library"><div class="wm-section-heading"><div><h3>Unit ${u.number} · ${esc(u.title)}</h3><p>本单元 ${list.length} 项练习词。新词表、课内复现与拓展的来源分类请在同步课堂核对；不等于整册完整词表。</p></div>${button('加入本单元全部精选词','enroll-unit','','primary-btn')}</div><div class="wm-word-grid">${list.map(w=>`<article class="wm-word"><div><h4 lang="en">${esc(w.word)}</h4><span>${esc(w.meaning)}</span></div><p lang="en">${esc(w.example)}</p>${button(state.cards[w.id]?'已在我的词库':'加入复习','enroll',w.id,state.cards[w.id]?'wm-added':'outline-btn',!!state.cards[w.id])}</article>`).join('')}</div><div class="wm-context-link"><p>先读本单元语篇，再用两三个词完成自己的表达。</p><div class="wm-actions">${button('读本单元短文','read',u.id)}${button('完成主题任务','literacy','','primary-btn')}</div></div></section>`;
   }
   function customHtml() {
     const own=Object.values(state.cards).filter(w=>w.origin==='custom');
@@ -153,7 +153,7 @@
     const p=round?.practice;if(!p||p.revealed||mode!=='spelling')return;
     p.input=($('wmSpellingInput')?.value||p.input).trim();
     if(!p.input){notice='先写下你的第一次拼写，再检查。';render();$('wmSpellingInput')?.focus();return;}
-    p.correct=C.checkSpelling(p.input,state.cards[p.id].word);p.revealed=true;notice='';render();
+    p.correct=C.checkSpelling(p.input,state.cards[p.id].word);p.spellingNote=window.SpellingPolicy?.compare(p.input,state.cards[p.id].word).note||'';p.revealed=true;notice='';render();
   }
   async function rate(rating) {
     const p=round?.practice;if(!p||!p.revealed||p.rated||busy)return;
@@ -161,7 +161,7 @@
     busy=true;render();
     try {
       await coordinateWrite(()=>{
-        if(!blockedRaw)state=C.merge(state,stored());
+        if(!blockedRaw)state=C.syncCatalog(C.merge(state,stored()),catalog);
         const time=now();
         if(newAllowanceReached(p.id,reviewMode,time)){p.blocked=true;return;}
         const actual=reviewMode==='spelling'?(p.correct?3:1):rating;

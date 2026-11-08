@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#356a62" />
-  <meta name="app-version" content="4.2.0" />
+  <meta name="app-version" content="4.2.1" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="AI英语成长空间" />
@@ -1148,17 +1148,18 @@
     .device-study-links a{padding:6px 12px;color:var(--primary);text-decoration:underline}
     @media(max-width:480px){.device-save-actions button{width:100%}.device-offline-head a{font-size:14px}}
   </style>
-  <link rel="stylesheet" href="polish.css?v=4.1.1">
-  <link rel="stylesheet" href="curriculum.css?v=4.1.1">
-  <link rel="stylesheet" href="classics.css?v=4.1.1">
-  <link rel="stylesheet" href="exam-path.css?v=4.1.1">
-  <link rel="stylesheet" href="rw.css?v=4.1.1">
-  <link rel="stylesheet" href="language-focus.css?v=4.1.1">
-  <link rel="stylesheet" href="word-study.css?v=4.1.1">
-  <link rel="stylesheet" href="textbook-alignment.css?v=4.1.1">
-<link rel="stylesheet" href="review.css?v=4.1.1">
-<link rel="stylesheet" href="literacy.css?v=4.1.1">
-<link rel="stylesheet" href="pilot.css?v=4.2.0">
+  <link rel="stylesheet" href="polish.css?v=4.2.1">
+  <link rel="stylesheet" href="curriculum.css?v=4.2.1">
+  <link rel="stylesheet" href="classics.css?v=4.2.1">
+  <link rel="stylesheet" href="exam-path.css?v=4.2.1">
+  <link rel="stylesheet" href="rw.css?v=4.2.1">
+  <link rel="stylesheet" href="language-focus.css?v=4.2.1">
+  <link rel="stylesheet" href="word-study.css?v=4.2.1">
+  <link rel="stylesheet" href="textbook-alignment.css?v=4.2.1">
+<link rel="stylesheet" href="review.css?v=4.2.1">
+<link rel="stylesheet" href="literacy.css?v=4.2.1">
+<link rel="stylesheet" href="pilot.css?v=4.2.1">
+<link rel="stylesheet" href="publisher-vocab.css?v=4.2.1">
 </head>
 <body>
 <section id="startupPanel" role="status" aria-live="polite"><h1 id="startupTitle">正在准备英语学习内容…</h1><p id="startupDetail">首次打开需要加载课程。稍后即可学习；已下载的独立学习文件可以直接离线打开。</p><button type="button" onclick="location.reload()">重新载入页面</button><a href="downloads/jiangsu-english-offline.html" download="jiangsu-english-offline.html">下载独立学习文件</a><small>当前网址首次访问需要可用网络。已有文件可通过 U 盘或文件传输取得；无需先打开本站。</small><noscript><p>请使用启用了 JavaScript 的现代浏览器打开学习文件。部分聊天软件或文件预览器无法运行学习功能。</p></noscript></section>
@@ -1200,6 +1201,7 @@
         <button data-view="today">✅ 今日任务</button>
         <button data-view="exam">🧭 能力训练</button>
         <button data-view="readwrite">✍ 中考读写专项</button>
+        <button data-view="publishers">📚 教材词汇中心</button>
         <button data-view="course">📘 译林同步课堂</button>
         <button data-view="words">🔤 词汇积累</button>
         <button data-view="literacy">🌿 学以致用</button>
@@ -1566,6 +1568,7 @@
         </div>
       </section>
 
+      <section class="view" id="publishers"><div id="publisherVocabRoot"></div></section>
       <section class="view" id="course">
         <div class="unit-banner">
           <div>
@@ -2497,13 +2500,14 @@
   <div id="toast" role="status" aria-live="polite" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;background:#243a35;color:white;padding:12px 18px;border-radius:999px;transition:.25s;z-index:100"></div>
 </div>
 
-<script src="learning-core.js?v=4.1.1"></script>
-<script src="curriculum-core.js?v=4.1.1"></script>
-<script src="classics-core.js?v=4.1.1"></script>
-<script src="word-study-core.js?v=4.1.1"></script>
-<script src="vendor/ts-fsrs-5.4.2.umd.js?v=4.1.1"></script>
-<script src="review-core.js?v=4.1.1"></script>
-<script src="exercise-data.js?v=4.1.1"></script>
+<script src="learning-core.js?v=4.2.1"></script>
+<script src="curriculum-core.js?v=4.2.1"></script>
+<script src="classics-core.js?v=4.2.1"></script>
+<script src="spelling-policy.js?v=4.2.1"></script>
+<script src="word-study-core.js?v=4.2.1"></script>
+<script src="vendor/ts-fsrs-5.4.2.umd.js?v=4.2.1"></script>
+<script src="review-core.js?v=4.2.1"></script>
+<script src="exercise-data.js?v=4.2.1"></script>
 <script>
 
   const OFFLINE_AUDIO = {};
@@ -4182,12 +4186,13 @@
     return {
       schema:'ai-english-growth-space-snapshot',
       schemaVersion:1,
-      appVersion:'V4.2.0',
+      appVersion:'V4.2.1',
       learningState:window.LearningApp?LearningApp.snapshot():null,
       curriculumState:window.Curriculum?Curriculum.snapshot():null,
       classicsState:window.Classics?Classics.snapshot():null,
       wordStudyState:window.WordStudy?WordStudy.snapshot():null,
       weekPilotState:window.WeekPilot?WeekPilot.snapshot():null,
+      publisherVocabState:window.PublisherVocab?PublisherVocab.snapshot():null,
       wordMemoryState:window.WordMemory?WordMemory.snapshot():null,
       literacyState:window.Literacy?Literacy.snapshot():null,
       readWriteState:window.RWStore?RWStore.snapshot():null,
@@ -4268,6 +4273,7 @@
     if(snapshot.wordStudyState!==undefined && snapshot.wordStudyState!==null)WordStudyCore.validate(snapshot.wordStudyState);
     if(snapshot.wordMemoryState!==undefined && snapshot.wordMemoryState!==null)WordMemoryCore.validate(snapshot.wordMemoryState);
     if(snapshot.weekPilotState!=null)WeekPilot.validate(snapshot.weekPilotState);
+    if(snapshot.publisherVocabState!=null)PublisherVocab.validate(snapshot.publisherVocabState);
     if(snapshot.readWriteState!=null)RWStore.validate(snapshot.readWriteState);
     if(snapshot.literacyState!==undefined && snapshot.literacyState!==null)LiteracyCore.validate(snapshot.literacyState);
     if(snapshot.literacyConflictEvidence!==undefined && snapshot.literacyConflictEvidence!==null)validateLiteracyConflictEvidence(snapshot.literacyConflictEvidence);
@@ -4353,6 +4359,7 @@
           ...(snapshot.classicsState?[['englishClassicsStateV31',JSON.stringify(ClassicsCore.normalize(snapshot.classicsState))]]:[]),
           ...(snapshot.wordStudyState?[['englishWordStudyV35',JSON.stringify(WordStudyCore.normalize(snapshot.wordStudyState))]]:[]),
           ...(snapshot.wordMemoryState?[['englishWordMemoryV40',JSON.stringify(WordMemoryCore.normalize(snapshot.wordMemoryState))]]:[]),
+          ...(snapshot.publisherVocabState!=null?[['englishPublisherVocabV1',JSON.stringify(PublisherVocab.validate(snapshot.publisherVocabState))]]:[]),
           ...(snapshot.weekPilotState!=null?[['englishWeekPilotV1',JSON.stringify(WeekPilot.validate(snapshot.weekPilotState))]]:[]),
           ...(snapshot.readWriteState?RWStore.entries(snapshot.readWriteState):[]),
           ...(snapshot.literacyState?[['englishLiteracyV40',JSON.stringify(LiteracyCore.normalize(snapshot.literacyState))]]:[]),
@@ -4713,26 +4720,28 @@
   renderBetaDashboard();
 
 </script>
-<script src="learning-app.js?v=4.1.1"></script>
-<script src="curriculum-data.js?v=4.1.1"></script>
-<script src="grammar-bank.js?v=4.1.1"></script>
-<script src="language-focus.js?v=4.1.1"></script>
-<script src="curriculum-app.js?v=4.1.1"></script>
-<script src="classics-data.js?v=4.1.1"></script>
-<script src="classics-app.js?v=4.1.1"></script>
-<script src="exam-path.js?v=4.1.1"></script>
-<script src="word-study-app.js?v=4.1.1"></script>
-<script src="review-app.js?v=4.1.1"></script>
-<script src="literacy-data.js?v=4.1.1"></script>
-<script src="literacy-core.js?v=4.1.1"></script>
-<script src="literacy-app.js?v=4.1.1"></script>
-<script src="textbook-alignment.js?v=4.1.1"></script>
-<script src="rw-packs.js?v=4.1.1"></script>
-<script src="rw-store.js?v=4.1.1"></script>
-<script src="rw-app.js?v=4.1.1"></script>
-<script src="unit-packs.js?v=4.2.0"></script>
-<script src="pilot.js?v=4.2.0"></script>
-<script src="offline-app.js?v=4.1.1"></script>
+<script src="learning-app.js?v=4.2.1"></script>
+<script src="curriculum-data.js?v=4.2.1"></script>
+<script src="grammar-bank.js?v=4.2.1"></script>
+<script src="language-focus.js?v=4.2.1"></script>
+<script src="curriculum-app.js?v=4.2.1"></script>
+<script src="classics-data.js?v=4.2.1"></script>
+<script src="classics-app.js?v=4.2.1"></script>
+<script src="exam-path.js?v=4.2.1"></script>
+<script src="word-study-app.js?v=4.2.1"></script>
+<script src="review-app.js?v=4.2.1"></script>
+<script src="literacy-data.js?v=4.2.1"></script>
+<script src="literacy-core.js?v=4.2.1"></script>
+<script src="literacy-app.js?v=4.2.1"></script>
+<script src="textbook-alignment.js?v=4.2.1"></script>
+<script src="rw-packs.js?v=4.2.1"></script>
+<script src="rw-store.js?v=4.2.1"></script>
+<script src="rw-app.js?v=4.2.1"></script>
+<script src="unit-packs.js?v=4.2.1"></script>
+<script src="pilot.js?v=4.2.1"></script>
+<script src="publisher-vocab-data.js?v=4.2.1"></script>
+<script src="publisher-vocab-app.js?v=4.2.1"></script>
+<script src="offline-app.js?v=4.2.1"></script>
 <script>
   function followLearningHistory(){
     const id=location.hash.slice(1), target=document.getElementById(id);

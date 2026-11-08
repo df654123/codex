@@ -9,9 +9,9 @@
   const answers=x=>Array.isArray(x)&&x.length<=5&&x.every(a=>a==null||Number.isInteger(a)&&a>=0&&a<4);
   const checks=x=>Array.isArray(x)&&x.length<=5&&x.every(a=>typeof a==='boolean'||a==null);
   const taskMap=x=>record(x)&&Object.entries(x).every(([k,v])=>k==='_date'?/^\d{4}-\d{2}-\d{2}$/.test(v):k==='_unit'?identity(v):taskKeys.includes(k)&&typeof v==='boolean');
-  const quizDraft=x=>record(x)&&identity(x.id)&&answers(x.answers)&&(x.assisted===undefined||typeof x.assisted==='boolean')&&(x.showTranscript===undefined||typeof x.showTranscript==='boolean')&&(x.submitted===undefined||typeof x.submitted==='boolean')&&(!x.submitted||(x.answers.length===5&&x.answers.every(Number.isInteger)));
+  const quizDraft=x=>record(x)&&identity(x.id)&&answers(x.answers)&&(x.assisted===undefined||typeof x.assisted==='boolean')&&(x.showTranscript===undefined||typeof x.showTranscript==='boolean')&&(x.submitted===undefined||typeof x.submitted==='boolean')&&(!x.submitted||(x.answers.length>=1&&x.answers.length<=5&&x.answers.every(Number.isInteger)));
   const mistake=x=>record(x)&&['prompt','chosen','answer','explanation'].every(k=>string(x[k]));
-  const attempt=x=>record(x)&&identity(x.id)&&identity(x.key)&&identity(x.unitId)&&kinds.includes(x.kind)&&timestamp(x.at)&&answers(x.answers)&&x.answers.length===5&&x.answers.every(Number.isInteger)&&x.total===5&&Number.isInteger(x.correct)&&x.correct>=0&&x.correct<=5&&(x.assisted===undefined||typeof x.assisted==='boolean')&&(x.variant===undefined||identity(x.variant))&&(x.mistakes===undefined||(Array.isArray(x.mistakes)&&x.mistakes.length<=5&&x.mistakes.every(mistake)));
+  const attempt=x=>record(x)&&identity(x.id)&&identity(x.key)&&identity(x.unitId)&&kinds.includes(x.kind)&&timestamp(x.at)&&answers(x.answers)&&x.answers.length>=1&&x.answers.length<=5&&x.answers.every(Number.isInteger)&&x.total===x.answers.length&&Number.isInteger(x.correct)&&x.correct>=0&&x.correct<=x.total&&(x.assisted===undefined||typeof x.assisted==='boolean')&&(x.variant===undefined||identity(x.variant))&&(x.mistakes===undefined||(Array.isArray(x.mistakes)&&x.mistakes.length<=5&&x.mistakes.every(mistake)));
   const writing=x=>record(x)&&string(x.text)&&checks(x.checks)&&(x.savedAt===undefined||timestamp(x.savedAt));
   const speaking=x=>record(x)&&checks(x.checks)&&(x.savedAt===undefined||timestamp(x.savedAt));
   const selfChecked=(entry,count)=>!!entry?.savedAt&&entry.checks?.length===count&&entry.checks.every(Boolean);
@@ -58,11 +58,13 @@
     s.dailyPlans[tasks._date][tasks._unit]={...tasks};
   }
   function tasksFor(s,date,unitId){return {...(s.dailyPlans[date]?.[unitId]||{}),_date:date,_unit:unitId};}
+  const vocabSets=unit=>unit.vocabularyAlignment?Array.from({length:Math.ceil(unit.vocabulary.length/5)},(_,i)=>'set'+(i+1)):['set1','set2'];
+  const revisionMatches=(a,unit)=>a.kind!=='vocabulary'||(a.contentRevision||1)===(unit.vocabularyRevision||1);
   function progress(s,unit){
     const tried=kind=>s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind);
-    const triedSet=(kind,id)=>s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind&&a.key===quizKey(unit.id,kind,id));
+    const triedSet=(kind,id)=>s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind&&a.key===quizKey(unit.id,kind,id)&&revisionMatches(a,unit));
     const grammar=(unit.grammarKeys||[]).length?unit.grammarKeys.every(id=>s.attempts.some(a=>a.unitId===unit.id&&a.kind==='grammar'&&a.key===quizKey(unit.id,'grammar',id))):tried('grammar');
-    const vocabulary=unit.vocabulary.every(w=>(s.words[unit.id]||[]).includes(w.word))||(triedSet('vocabulary','set1')&&triedSet('vocabulary','set2'));
+    const vocabulary=unit.vocabulary.every(w=>(s.words[unit.id]||[]).includes(w.word))||vocabSets(unit).every(id=>triedSet('vocabulary',id));
     const complete={vocabulary,grammar,reading:tried('reading'),listening:tried('listening'),speaking:selfChecked(s.speaking[unit.id],3),writing:selfChecked(s.writing[unit.id],5)&&!!s.writing[unit.id].text.trim()};
     const done=Object.values(complete).filter(Boolean).length;
     return {done,total:6,percent:Math.round(done/6*100),complete};
@@ -72,8 +74,8 @@
     const kind=['vocabulary','grammar','reading','listening','speaking','writing'].find(k=>(!onlyKind||k===onlyKind)&&!complete[k]);
     if(!kind)return {kind:'complete'};
     if(kind==='vocabulary'||kind==='grammar'){
-      const variants=kind==='vocabulary'?['set1','set2']:unit.grammarKeys||[];
-      const variant=variants.find(id=>!s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind&&a.key===quizKey(unit.id,kind,id)));
+      const variants=kind==='vocabulary'?vocabSets(unit):unit.grammarKeys||[];
+      const variant=variants.find(id=>!s.attempts.some(a=>a.unitId===unit.id&&a.kind===kind&&a.key===quizKey(unit.id,kind,id)&&revisionMatches(a,unit)));
       return {kind,...(variant?{variant}:{})};
     }
     return {kind};

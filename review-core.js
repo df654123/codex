@@ -4,10 +4,11 @@
   const library = typeof module !== 'undefined' && module.exports
     ? require('./vendor/ts-fsrs-5.4.2.umd.js')
     : (root.FSRS || globalThis.FSRS);
-  const api = factory(library);
+  const policy = typeof module !== 'undefined' && module.exports ? require('./spelling-policy.js') : root.SpellingPolicy;
+  const api = factory(library,policy);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.WordMemoryCore = api;
-})(typeof window === 'undefined' ? globalThis : window, function (FSRS) {
+})(typeof window === 'undefined' ? globalThis : window, function (FSRS,policy) {
   'use strict';
   if (!FSRS || typeof FSRS.fsrs !== 'function' || !String(FSRS.FSRSVersion).includes('5.4.2')) {
     throw Error('复习引擎未加载：请先加载本站固定的 ts-fsrs 5.4.2 文件。');
@@ -106,7 +107,7 @@
   }
   function checkSpelling(input, word) {
     const actual = spelling(input), expected = spelling(word);
-    return !!actual && !!expected && actual === expected;
+    return policy ? policy.compare(input,word).correct : !!actual && !!expected && actual === expected;
   }
   function wordFields(value) {
     if (!plain(value)) fail('词条格式不合法。');
@@ -262,6 +263,13 @@
     commit(state, draft);
     return {added, existing};
   }
+  function syncCatalog(state, rows) {
+    for (const row of rows) {
+      const card=state.cards[row.id];
+      if(card && card.origin==='curriculum' && compatible(card,row)){card.meaning=row.meaning;card.example=row.example;}
+    }
+    return state;
+  }
   function customIdentity(row) {
     const source = JSON.stringify([row.unitId, spelling(row.word), row.meaning]);
     let a = 2166136261, b = 5381;
@@ -399,5 +407,5 @@
     for (const card of Object.values(result.cards)) for (const kind of MODES) card.schedulers[kind] = replay(card, kind, result.logs);
     return validate(result);
   }
-  return Object.freeze({createState, normalize, validate, catalog, addWords, addCustom, parseImport, migrateLegacy, queue, review, checkSpelling, stats, merge});
+  return Object.freeze({createState, normalize, validate, catalog, syncCatalog, addWords, addCustom, parseImport, migrateLegacy, queue, review, checkSpelling, stats, merge});
 });

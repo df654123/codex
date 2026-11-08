@@ -64,16 +64,17 @@
   const spelling = text => String(text).trim().toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ');
   function checkSpelling(state, card, input, answer, at = new Date()) {
     if (card.checked || typeof input !== 'string' || !input.trim() || typeof answer !== 'string' || !answer.trim() || !dayKey(at)) return null;
-    const correct = spelling(input) === spelling(answer);
+    const verdict = root.SpellingPolicy ? root.SpellingPolicy.compare(input,answer) : {correct:spelling(input) === spelling(answer),note:''};
+    const correct = verdict.correct;
     const record = currentRecord(state, card, at);
     const field = correct ? 'spellingCorrect' : 'spellingWrong';
     record[field] = add(record[field]); record.at = new Date(at).toISOString();
     card.checked = true; card.input = input.trim();
-    card.result = {correct,answer,input:card.input};
+    card.result = {correct,answer,input:card.input,note:verdict.note};
     return {...card.result};
   }
   function filterWords(state, unit, filter = 'all', today = dayKey()) {
-    return unit.vocabulary.map((word, index) => index).filter(index => {
+    return unit.vocabulary.map((word, index) => index).sort((a,b)=>(unit.vocabulary[a].displayOrder??a)-(unit.vocabulary[b].displayOrder??b)).filter(index => {
       const record = state.records[key(unit.id, index)];
       if (filter === 'new') return !record || record.level === 0;
       if (filter === 'due') return !record || record.due <= today;
