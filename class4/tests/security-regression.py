@@ -44,6 +44,17 @@ extra='''    def test_06_stats_omit_other_class_notes(self):
         finally:
             dbwrite(main,'UPDATE admins SET class_id=9004 WHERE id=9002')
     AccessTests.test_09_empty_class_access_cannot_export_school=test_09_empty_class_access_cannot_export_school
+    def test_10_internal_teacher_retry_is_idempotent(self):
+        operation={'username':'qa_student_own','score_change':2,'description':'synthetic-duplicate-retry','operationId':'class4-retry-fixed-01'}
+        first=req('POST','/api/scores/add',B,json=operation)
+        second=req('POST','/api/scores/add',B,json=operation)
+        self.assertEqual(first.status_code,200)
+        self.assertEqual(second.status_code,200)
+        with sqlite3.connect(school) as conn:
+            count,total=conn.execute("SELECT count(*), sum(score_change) FROM score_logs WHERE description='synthetic-duplicate-retry'").fetchone()
+        self.assertEqual((count,total),(1,2))
+    AccessTests.test_10_internal_teacher_retry_is_idempotent=test_10_internal_teacher_retry_is_idempotent
+
 '''
 source=source.replace(anchor,extra+anchor)
 exec(compile(source,str(source_path),'exec'),{'__name__':'__main__','__file__':str(source_path)})

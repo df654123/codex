@@ -62,7 +62,7 @@ try:
         def test_01_anonymous_private_data_denied(self):
             self.assertIn(req('GET','/api/users').status_code,(401,403))
         def test_02_two_teachers_see_saved_record(self):
-            r=req('POST','/api/scores/add',A,json={'username':'qa_student_own','score_change':1,'description':'synthetic lesson observation'})
+            r=req('POST','/api/scores/add',A,json={'username':'qa_student_own','score_change':1,'description':'synthetic lesson observation','operationId':'class4-baseline-score-0001'})
             self.assertEqual(r.status_code,200)
             self.assertEqual(r.json()['summary']['successCount'],1)
             second=req('GET','/api/users',B)

@@ -95,4 +95,59 @@ for (const name of ['server/utils/backup.ts','docker-compose.yml']) {
   const content = await fs.readFile(new URL('./overrides/' + name, import.meta.url), 'utf8');
   await fs.writeFile(path.join(root, name), content);
 }
+// Class4: stable teacher operations and atomic idempotency receipts.
+for (const name of ['server/api/scores/add.post.ts', 'server/utils/teacher-score-intent.ts']) {
+  const content = await fs.readFile(new URL('./overrides/' + name, import.meta.url), 'utf8');
+  await fs.writeFile(path.join(root, name), content);
+}
+const scoresPagePath = path.join(root, 'app/pages/admin/scores.vue');
+let scoresPage = await fs.readFile(scoresPagePath, 'utf8');
+const startMarker = 'async function submitScores() {';
+if (scoresPage.split(startMarker).length !== 2) throw new Error('Score UI anchor mismatch');
+scoresPage = scoresPage.replace(startMarker, `
+async function scoreIntentFor(body: any) {
+  const actor = currentUser.value?.id || 'anonymous'
+  const school = currentUser.value?.role === 'super_admin' ? filterSchoolId.value : currentUser.value?.schoolId
+  const storageKey = 'class4:score-intent:' + actor + ':' + school
+  const raw = JSON.stringify(body)
+  const encoded = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
+  const fingerprint = [...new Uint8Array(encoded)].map(b => b.toString(16).padStart(2, '0')).join('')
+  let previous: any = null
+  try { previous = JSON.parse(localStorage.getItem(storageKey) || 'null') } catch {}
+  const operationId = previous?.fingerprint === fingerprint ? previous.operationId : crypto.randomUUID()
+  localStorage.setItem(storageKey, JSON.stringify({ fingerprint, operationId }))
+  return { operationId, storageKey }
+}
+` + startMarker);
+const target = `    const data = await $fetch('/api/scores/add', {
+      method: 'POST',
+      body: {
+        users: selectedUsers.value.map(u => ({
+          username: u.username,
+          score_change: scoreChange.value,
+        })),
+        description: description.value,
+      },
+      query,
+    })`;
+if(scoresPage.split(target).length!==2)throw new Error('Score submit anchor mismatch');
+scoresPage=scoresPage.replace(target,`    const payload = {
+      users: selectedUsers.value.map(u => ({
+        username: u.username, score_change: scoreChange.value,
+      })),
+      description: description.value,
+    }
+    const intent = await scoreIntentFor(payload)
+    const data = await $fetch('/api/scores/add', {
+      method: 'POST',
+      body: { ...payload, operationId: intent.operationId },
+      query,
+    })`);
+const successMarker="    if (data.success) {
+      operationResult.value";
+if(scoresPage.split(successMarker).length!==2)throw new Error('Score success anchor mismatch');
+scoresPage=scoresPage.replace(successMarker,"    if (data.success) {
+      localStorage.removeItem(intent.storageKey)
+      operationResult.value");
+await fs.writeFile(scoresPagePath,scoresPage);
 console.log('Applied verified source fixes and scoped live refresh; no business records modified.');
