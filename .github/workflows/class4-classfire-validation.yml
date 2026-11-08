@@ -29,7 +29,6 @@ jobs:
           set -euo pipefail
           mkdir -p evidence
           test "$(git rev-parse HEAD)" = "$UPSTREAM_SHA"
-          test -s LICENSE
           grep -q 'GNU GENERAL PUBLIC LICENSE' LICENSE
           test -s package-lock.json
           test -s Dockerfile
@@ -62,27 +61,24 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '22.22.3'
       - name: Preserve baseline report
         run: |
           mkdir -p candidate-deps
           npm audit --package-lock-only --omit=dev --json > candidate-deps/upstream-audit.json || true
-      - name: Create candidate lock without executing dependency scripts
+      - name: Create reviewed candidate lock without dependency scripts
         shell: bash
         run: |
           set -euo pipefail
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund drizzle-orm@0.45.4
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --save-exact drizzle-orm@0.45.4 nodemailer@10.4.0
           npm audit fix --package-lock-only --ignore-scripts --no-fund > candidate-deps/remediation.log 2>&1 || true
           cp package.json package-lock.json candidate-deps/
           sha256sum package-lock.json > candidate-deps/lock-sha256.txt
-      - name: Block candidate with high or critical dependency findings
+      - name: Block high or critical dependency findings
         shell: bash
         run: |
           set -euo pipefail
-          set +e
-          npm audit --package-lock-only --omit=dev --json > candidate-deps/candidate-audit.json
-          status=$?
-          set -e
+          npm audit --package-lock-only --omit=dev --json > candidate-deps/candidate-audit.json || true
           node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('candidate-deps/candidate-audit.json')); if(!r.metadata?.vulnerabilities)process.exit(2); console.log(JSON.stringify(r.metadata.vulnerabilities)); if(r.metadata.vulnerabilities.high||r.metadata.vulnerabilities.critical)process.exit(1);"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -93,7 +89,7 @@ jobs:
           if-no-files-found: error
 
   production-build:
-    name: Patched build and real SQLite HTTP tests
+    name: Patched build and real application tests
     needs: [source-audit, dependencies]
     if: always() && needs.source-audit.result == 'success'
     runs-on: ubuntu-latest
@@ -111,12 +107,12 @@ jobs:
           path: upstream
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '22.22.3'
       - uses: actions/download-artifact@v4
         with:
           name: class4-dependency-candidate
           path: candidate-deps
-      - name: Apply reviewed source fixes and frozen candidate lock
+      - name: Apply reviewed fixes and frozen candidate lock
         shell: bash
         run: |
           set -euo pipefail
@@ -127,12 +123,13 @@ jobs:
           cp candidate-deps/*.json evidence/
           cp candidate-deps/lock-sha256.txt evidence/
           cp -r integration/class4 upstream/class4-integration
+          node --version > evidence/node-version.txt
       - name: Install frozen candidate dependencies
         working-directory: upstream
         shell: bash
         run: |
           set -euo pipefail
-          npm ci --no-audit --no-fund 2>&1 | tee ../evidence/install.log
+          npm ci --engine-strict --no-audit --no-fund 2>&1 | tee ../evidence/install.log
       - name: Build full upstream application with fixes
         working-directory: upstream
         shell: bash
@@ -141,12 +138,22 @@ jobs:
           npm run build 2>&1 | tee ../evidence/build.log
           test -s .output/server/index.mjs
           test -d .output/public
-      - name: Run mandatory real database and HTTP regression tests
+      - name: Mandatory SQLite HTTP and mail compatibility tests
         shell: bash
         run: |
           set -euo pipefail
           node integration/class4/tests/runtime.mjs upstream 2>&1 | tee evidence/runtime-tests.log
-          printf '{"sqliteTests":6,"httpTests":5,"testsPassed":true,"productionAccepted":false}\n' > evidence/test-result.json
+          node integration/class4/tests/mail-compat.mjs upstream 2>&1 | tee evidence/mail-tests.log
+      - name: Install isolated browser test runner
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Real browser login and mobile write with second actor read
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLASSFIRE_RUNTIME="$PWD/upstream" python3 integration/class4/tests/browser-extension.py 2>&1 | tee evidence/browser-tests.log
+          printf '{"sqliteTests":6,"httpTests":5,"mailCompatibility":true,"browserWorkflow":true,"productionAccepted":false}\n' > evidence/test-result.json
       - name: Package application and complete corresponding source
         shell: bash
         run: |
