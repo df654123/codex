@@ -20,6 +20,7 @@ jobs:
             python3 tools/vocab-content-20261108.py
             python3 tools/patch-vocab-20261108.py
           fi
+          python3 tools/harden-vocab-release.py
           python3 tools/build-vocabulary-release.py
       - name: Verify data, spelling, old record identity and syntax
         run: |
@@ -37,7 +38,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add curriculum-data.js curriculum-app.js curriculum-core.js word-study-app.js word-study-core.js review-app.js review-core.js index.html sw.js downloads/jiangsu-english-offline.html downloads/jiangsu-english-complete.zip publisher-vocab-data.js content/yilin-revision.json release-vocabulary.json qa/test_vocab_integration.py
+          git add curriculum-data.js curriculum-app.js curriculum-core.js word-study-app.js word-study-core.js review-app.js review-core.js index.html sw.js downloads/jiangsu-english-offline.html downloads/jiangsu-english-complete.zip publisher-vocab-data.js publisher-vocab-app.js content/yilin-revision.json release-vocabulary.json qa/test_vocab_integration.py qa/browser_revision.py
           if ! git diff --cached --quiet; then
             git commit -m 'build: verified vocabulary 4.2.1 candidate; no production ref moved'
             git push origin HEAD:vocab-repair-rj-20261108
