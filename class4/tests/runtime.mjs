@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 const root = path.resolve(process.argv[2] || 'upstream');
 const here = path.dirname(fileURLToPath(import.meta.url));
 const commands = [
+  ['node', ['--test', path.join(here, 'live-refresh.mjs')]],
   ['node', ['--experimental-strip-types', '--test', path.join(here, 'score-integrity.mjs')]],
   ['python3', [path.join(here, 'http-access.py')]],
 ];
@@ -17,4 +18,4 @@ for (const [command, args] of commands) {
     process.exit(result.status || 1);
   }
 }
-console.log('11 SQLite and HTTP checks passed. This is not campus-network or production acceptance.');
+console.log('6 refresh, 6 SQLite and 5 HTTP checks passed. Not production acceptance.');

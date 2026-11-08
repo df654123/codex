@@ -18,7 +18,6 @@ extra='''    def browser_workflow(self):
                     page=context.new_page()
                     page.on('pageerror',lambda error: errors.append(str(error)))
                     page.goto(BASE+'/login',wait_until='networkidle')
-                    # Usernames are school-scoped. No school selects the super-admin namespace.
                     page.locator('select').first.select_option('9001')
                     page.locator('input[autocomplete="username"]').fill(name)
                     page.locator('input[type="password"]').first.fill(password)
@@ -30,21 +29,24 @@ extra='''    def browser_workflow(self):
                     expect(page.get_by_role('heading',name='积分管理',exact=True)).to_be_visible()
                     self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'),viewport['width']+2)
                 a=contexts[0].pages[0]
+                b=contexts[1].pages[0]
+                b.get_by_placeholder('请输入操作备注...').fill('preserve-unsubmitted-draft')
                 a.get_by_role('button',name='列表勾选',exact=True).click()
                 a.locator('label').filter(has_text='qa_student_own').locator('input[type="checkbox"]').check()
                 a.get_by_placeholder('请输入操作备注...').fill('browser-verified-observation')
+                started=time.monotonic()
                 a.get_by_role('button',name='为 1 名用户 加1 分',exact=True).click()
                 expect(a.get_by_text('browser-verified-observation',exact=True)).to_be_visible()
-                b=contexts[1].pages[0]
-                b.reload(wait_until='networkidle')
-                expect(b.get_by_text('browser-verified-observation',exact=True)).to_be_visible()
+                # No reload or manual API call: this verifies automatic cross-actor updates.
+                expect(b.get_by_text('browser-verified-observation',exact=True)).to_be_visible(timeout=10000)
+                print('Measured automatic update seconds:',round(time.monotonic()-started,3))
+                expect(b.get_by_placeholder('请输入操作备注...')).to_have_value('preserve-unsubmitted-draft')
                 self.assertNotIn('qa_student_other',b.locator('body').inner_text())
                 self.assertEqual(errors,[], 'Browser runtime errors must not be ignored')
             except Exception:
                 for index, context in enumerate(contexts):
                     for page in context.pages:
                         print('Browser diagnostic',index,'url',page.url,'errors',errors)
-                        # Test-only synthetic data; never export cookies, passwords or headers.
                         print(page.locator('body').inner_text()[:3500])
                 raise
             finally:

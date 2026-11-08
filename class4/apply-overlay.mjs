@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { prepareLiveChanges } from './apply-live.mjs';
 const root = path.resolve(process.argv[2] || 'upstream');
 const hashes = {
   'nuxt.config.ts': '3748e33a79d9489fc393d5f486f2266f16d6e04c5b37c169cebe91a0b6fd83f2',
@@ -22,7 +23,7 @@ function once(source, from, to) {
   if (source.split(from).length !== 2) throw new Error('Ambiguous source anchor');
   return source.replace(from, to);
 }
-const changes = { ...originals };
+const changes = { ...originals, ...await prepareLiveChanges(root) };
 changes['nuxt.config.ts'] = once(originals['nuxt.config.ts'],
   "viewport: 'width=500, initial-scale=1'", "viewport: 'width=device-width, initial-scale=1'");
 changes['server/utils/auth.ts'] = once(originals['server/utils/auth.ts'],
@@ -83,4 +84,4 @@ export default defineEventHandler(async (event) => {
 })
 `;
 for (const [name, content] of Object.entries(changes)) await fs.writeFile(path.join(root, name), content);
-console.log('Applied 4 source fixes; no database, credentials, or student records modified.');
+console.log('Applied verified source fixes and scoped live refresh; no business records modified.');
