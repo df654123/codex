@@ -123,7 +123,19 @@ jobs:
           cp candidate-deps/*.json evidence/
           cp candidate-deps/lock-sha256.txt evidence/
           cp -r integration/class4 upstream/class4-integration
+          mkdir -p upstream/deploy/tencent
+          cp -R integration/class4/deploy/tencent/. upstream/deploy/tencent/
           node --version > evidence/node-version.txt
+      - name: Validate Tencent Compose configuration (no live secrets or server)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream/deploy/tencent
+          CLASS4_DOMAIN=workbench.example.invalid CLASS4_CERT_EMAIL=ops@example.invalid NUXT_SESSION_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef docker compose -f compose.yaml config -q
+          test -s Dockerfile
+          test -s Caddyfile
+          test -s README.md
+          test -s backup.sh
       - name: Install frozen candidate dependencies
         working-directory: upstream
         shell: bash

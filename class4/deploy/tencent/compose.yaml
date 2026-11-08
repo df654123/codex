@@ -1,0 +1,56 @@
+name: class4-workbench
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/tencent/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NUXT_SESSION_PASSWORD: ${NUXT_SESSION_PASSWORD:?Set a strong session secret; never commit it}
+      TZ: Asia/Shanghai
+      NITRO_HOST: 0.0.0.0
+      NITRO_PORT: "3000"
+    volumes:
+      - class4_data:/app/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get('http://127.0.0.1:3000/api/settings/public',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  gateway:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      CLASS4_DOMAIN: ${CLASS4_DOMAIN:?Domain required; use test-only localhost alternative if none}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    driver: bridge
+volumes:
+  class4_data:
+  caddy_data:
+  caddy_config:
