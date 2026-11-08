@@ -1,0 +1,66 @@
+// Class4: local writes require explicit personal-device consent.
+const offlineConsent = ref(false)
+const offlinePendingCount = ref(0)
+const offlineStatus = ref('')
+let offlineDraining = false
+let offlineTimer = null
+const offlineScope = () => {
+  const u = currentUser.value
+  if (!u) return ''
+  const school = u.role === 'super_admin' ? filterSchoolId.value : u.schoolId
+  return school ? String(u.id) + ':' + String(school) : ''
+}
+function rememberOfflineConsent() {
+  if (typeof window === 'undefined') return
+  const scope = offlineScope()
+  offlineConsent.value = Boolean(scope && localStorage.getItem('class4:trusted-offline:' + scope) === 'yes')
+  void showPendingOfflineCount()
+}
+async function showPendingOfflineCount() {
+  const scope = offlineScope()
+  if (scope) offlinePendingCount.value = (await listPending(scope)).length
+}
+function changeOfflineConsent() {
+  const scope = offlineScope()
+  if (!scope) return
+  if (offlineConsent.value && !window.confirm('仅限个人保管设备。待传记录会暂存学生账号和观察备注，未单独加密；不要在教室公共电脑开启。是否确认？')) {
+    offlineConsent.value = false
+  }
+  localStorage.setItem('class4:trusted-offline:' + scope, offlineConsent.value ? 'yes' : 'no')
+}
+async function flushOfflineScores() {
+  if (offlineDraining || !offlineConsent.value || !navigator.onLine || submitting.value) return
+  const scope = offlineScope()
+  if (!scope) return
+  offlineDraining = true
+  try {
+    const items = await listPending(scope)
+    for (const item of items) {
+      if (scope !== offlineScope()) break
+      const query = {}
+      if (currentUser.value?.role === 'super_admin') query.schoolId = filterSchoolId.value
+      const reply = await $fetch('/api/scores/add', {
+        method: 'POST',
+        body: { ...item.payload, operationId: item.id },
+        query,
+      })
+      if (reply?.success) await removePending(item.id)
+    }
+    offlinePendingCount.value = (await listPending(scope)).length
+    offlineStatus.value = offlinePendingCount.value ? '仍有待传记录' : '本机待传记录已由服务器确认'
+  } catch (error) {
+    offlineStatus.value = '同步暂未完成，记录仍保留在本机。请联网并确认账号权限。'
+  } finally {
+    offlineDraining = false
+  }
+}
+watch([currentUser, filterSchoolId], rememberOfflineConsent, { immediate: true })
+onMounted(() => {
+  offlineTimer = setInterval(() => { void flushOfflineScores() }, 10000)
+  window.addEventListener('online', flushOfflineScores)
+  void flushOfflineScores()
+})
+onBeforeUnmount(() => {
+  if (offlineTimer) clearInterval(offlineTimer)
+  window.removeEventListener('online', flushOfflineScores)
+})

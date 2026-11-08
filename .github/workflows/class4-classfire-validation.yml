@@ -1,0 +1,184 @@
+name: Class4 ClassFire verification
+on:
+  push:
+    branches: ['class4/classfire-integration-20261108']
+    paths: ['.github/workflows/class4-classfire-validation.yml', 'class4/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: class4-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  UPSTREAM_REPO: QianKunBoss/ClassFire
+  UPSTREAM_SHA: eabe5d6c8efd3f249e6ac284bad0ca2d2fdc5d8b
+jobs:
+  source-audit:
+    name: Source and license audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.UPSTREAM_SHA }}
+          persist-credentials: false
+      - name: Verify pinned source and GPL license
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          test "$(git rev-parse HEAD)" = "$UPSTREAM_SHA"
+          grep -q 'GNU GENERAL PUBLIC LICENSE' LICENSE
+          test -s package-lock.json
+          test -s Dockerfile
+          test -d server/api
+          test -d app/pages
+          git ls-files > evidence/tracked-files.txt
+          if git ls-files | grep -E '(^|/)(\.env$|[^/]*\.(db|sqlite|sqlite3)$)'; then
+            echo 'Blocked: tracked runtime configuration or database needs review'
+            exit 1
+          fi
+          git archive --format=tar.gz --prefix=classfire/ HEAD > evidence/classfire-upstream-source.tar.gz
+          sha256sum evidence/classfire-upstream-source.tar.gz > evidence/source-sha256.txt
+          printf '{"upstream":"%s","commit":"%s","productionAccepted":false}\n' "$UPSTREAM_REPO" "$UPSTREAM_SHA" > evidence/provenance.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: class4-source-evidence
+          path: evidence/
+          retention-days: 14
+          if-no-files-found: error
+
+  dependencies:
+    name: Candidate dependency security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.UPSTREAM_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.3'
+      - name: Preserve baseline report
+        run: |
+          mkdir -p candidate-deps
+          npm audit --package-lock-only --omit=dev --json > candidate-deps/upstream-audit.json || true
+      - name: Create reviewed candidate lock without dependency scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --save-exact drizzle-orm@0.45.4 nodemailer@10.4.0
+          npm audit fix --package-lock-only --ignore-scripts --no-fund > candidate-deps/remediation.log 2>&1 || true
+          cp package.json package-lock.json candidate-deps/
+          sha256sum package-lock.json > candidate-deps/lock-sha256.txt
+      - name: Block high or critical dependency findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --package-lock-only --omit=dev --json > candidate-deps/candidate-audit.json || true
+          node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('candidate-deps/candidate-audit.json')); if(!r.metadata?.vulnerabilities)process.exit(2); console.log(JSON.stringify(r.metadata.vulnerabilities)); if(r.metadata.vulnerabilities.high||r.metadata.vulnerabilities.critical)process.exit(1);"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: class4-dependency-candidate
+          path: candidate-deps/
+          retention-days: 14
+          if-no-files-found: error
+
+  production-build:
+    name: Patched build and real application tests
+    needs: [source-audit, dependencies]
+    if: always() && needs.source-audit.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: integration
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.UPSTREAM_SHA }}
+          persist-credentials: false
+          path: upstream
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.3'
+      - uses: actions/download-artifact@v4
+        with:
+          name: class4-dependency-candidate
+          path: candidate-deps
+      - name: Apply reviewed fixes and frozen candidate lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          node integration/class4/apply-overlay.mjs upstream
+          test -s candidate-deps/package-lock.json
+          cp candidate-deps/package.json candidate-deps/package-lock.json upstream/
+          cp candidate-deps/*.json evidence/
+          cp candidate-deps/lock-sha256.txt evidence/
+          cp -r integration/class4 upstream/class4-integration
+          mkdir -p upstream/deploy/tencent
+          cp -R integration/class4/deploy/tencent/. upstream/deploy/tencent/
+          node --version > evidence/node-version.txt
+      - name: Validate Tencent Compose configuration (no live secrets or server)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream/deploy/tencent
+          CLASS4_DOMAIN=workbench.example.invalid CLASS4_CERT_EMAIL=ops@example.invalid NUXT_SESSION_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef docker compose -f compose.yaml config -q
+          test -s Dockerfile
+          test -s Caddyfile
+          test -s README.md
+          test -s backup.sh
+      - name: Install frozen candidate dependencies
+        working-directory: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --engine-strict --no-audit --no-fund 2>&1 | tee ../evidence/install.log
+      - name: Build full upstream application with fixes
+        working-directory: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build 2>&1 | tee ../evidence/build.log
+          test -s .output/server/index.mjs
+          test -d .output/public
+      - name: Mandatory SQLite HTTP and mail compatibility tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node integration/class4/tests/runtime.mjs upstream 2>&1 | tee evidence/runtime-tests.log
+          node integration/class4/tests/mail-compat.mjs upstream 2>&1 | tee evidence/mail-tests.log
+          CLASSFIRE_RUNTIME="$PWD/upstream" python3 integration/class4/tests/security-regression.py 2>&1 | tee evidence/security-regression.log
+          CLASSFIRE_ROOT="$PWD/upstream" node --experimental-strip-types --test integration/class4/tests/backup-regression.mjs 2>&1 | tee evidence/backup-regression.log
+      - name: Install isolated browser test runner
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Real browser login and mobile write with second actor read
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLASSFIRE_RUNTIME="$PWD/upstream" python3 integration/class4/tests/browser-extension.py 2>&1 | tee evidence/browser-tests.log
+          printf '{"sqliteTests":6,"httpTests":5,"mailCompatibility":true,"browserWorkflow":true,"productionAccepted":false}\n' > evidence/test-result.json
+      - name: Package application and complete corresponding source
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '{"upstream":"%s","commit":"%s","integrationCommit":"%s","productionAccepted":false}\n' "$UPSTREAM_REPO" "$UPSTREAM_SHA" "$GITHUB_SHA" > upstream/CLASS4-PROVENANCE.json
+          tar --exclude='./.git' --exclude='./node_modules' --exclude='./.nuxt' --exclude='./data' --exclude='./.env' -czf evidence/classfire-candidate-with-source.tar.gz -C upstream .
+          sha256sum evidence/classfire-candidate-with-source.tar.gz > evidence/package-sha256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: class4-build-evidence
+          path: evidence/
+          retention-days: 14
+          if-no-files-found: error

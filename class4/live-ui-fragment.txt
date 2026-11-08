@@ -1,0 +1,54 @@
+
+// Class4 2026-11-08: refresh shared records only; never reset an unsubmitted form.
+const liveMessage = ref('其他教师的新记录将在当前页面自动更新。')
+let class4Reader: ReturnType<typeof createScopedReader> | null = null
+let class4Timer: ReturnType<typeof setInterval> | null = null
+const refreshClass4Records = () => { void class4Reader?.refresh() }
+onMounted(() => {
+  class4Reader = createScopedReader({
+    getScope: () => {
+      const actor = currentUser.value
+      if (!actor || (actor.role === 'super_admin' && !filterSchoolId.value)) return null
+      const schoolId = actor.role === 'super_admin' ? filterSchoolId.value : actor.schoolId
+      return { key: `${actor.id}:${schoolId}:${effectiveClassId.value || 'all'}`,
+        query: actor.role === 'super_admin' ? { schoolId } : {} }
+    },
+    isVisible: () => !document.hidden && !submitting.value,
+    read: async (scope: any) => {
+      const [students, logs] = await Promise.all([
+        $fetch<PaginatedResponse<User>>('/api/users', {
+          params: { ...scope.query, limit: 200 }, credentials: 'include', cache: 'no-store', timeout: 8000,
+        }),
+        $fetch<PaginatedResponse<any>>('/api/scores/logs', {
+          params: { ...scope.query, limit: 20 }, credentials: 'include', cache: 'no-store', timeout: 8000,
+        }),
+      ])
+      if (!Array.isArray(students?.data) || !Array.isArray(logs?.data))
+        throw new Error('Invalid classroom response')
+      return { students: students.data, logs: logs.data }
+    },
+    write: (data: any) => { users.value = data.students; recentLogs.value = data.logs },
+    onState: (state: any) => {
+      if (state.ok) {
+        const time = new Date(state.receivedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai' })
+        liveMessage.value = `最近更新 ${time}；当前页面约每5秒检查一次。`
+      } else if ([401, 403].includes(state.status)) {
+        users.value = []; recentLogs.value = []; selectedUsers.value = []
+        liveMessage.value = '登录或班级权限已变化，已暂停更新；请重新登录核验。'
+      } else if (state.status === 429) {
+        liveMessage.value = '服务请求受限，已暂停自动更新；请稍后重新打开页面。'
+      } else {
+        liveMessage.value = '暂未取得最新数据，当前显示上次记录。未提交内容保留。'
+      }
+    },
+  })
+  class4Timer = setInterval(refreshClass4Records, 5000)
+  document.addEventListener('visibilitychange', refreshClass4Records)
+  window.addEventListener('online', refreshClass4Records)
+})
+onBeforeUnmount(() => {
+  class4Reader?.stop()
+  if (class4Timer) clearInterval(class4Timer)
+  document.removeEventListener('visibilitychange', refreshClass4Records)
+  window.removeEventListener('online', refreshClass4Records)
+})
