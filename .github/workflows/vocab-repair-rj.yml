@@ -1,0 +1,56 @@
+name: Vocabulary repair and publisher trial
+on:
+  push:
+    branches: [vocab-repair-rj-20261108]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: vocabulary-candidate
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate source-scoped content and apply audited repair once
+        run: |
+          if grep -q '"version":"3.8"' curriculum-data.js; then
+            python3 tools/vocab-content-20261108.py
+            python3 tools/patch-vocab-20261108.py
+          fi
+          python3 tools/build-vocabulary-release.py
+      - name: Verify data, spelling, old record identity and syntax
+        run: |
+          python3 -m unittest qa.test_vocab_integration -v
+          node qa/test_vocab_runtime.js
+          node qa/revision_runtime.js
+          for f in *.js; do node --check "$f"; done
+      - name: Install browser test driver
+        run: python3 -m pip install playwright==1.56.0
+      - name: Test real browser interactions and offline records
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: python3 qa/browser_revision.py
+      - name: Commit tested generated files to candidate only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add curriculum-data.js curriculum-app.js curriculum-core.js word-study-app.js word-study-core.js review-app.js review-core.js index.html sw.js downloads/jiangsu-english-offline.html downloads/jiangsu-english-complete.zip publisher-vocab-data.js content/yilin-revision.json release-vocabulary.json qa/test_vocab_integration.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: verified vocabulary 4.2.1 candidate; no production ref moved'
+            git push origin HEAD:vocab-repair-rj-20261108
+          fi
+          git rev-parse HEAD
+      - name: Save synthetic test evidence and runnable package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vocabulary-candidate-evidence
+          retention-days: 7
+          path: |
+            qa/evidence/
+            release-vocabulary.json
+            downloads/jiangsu-english-complete.zip
+            downloads/jiangsu-english-offline.html
