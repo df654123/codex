@@ -472,7 +472,7 @@
     if (el.id === 'cxLibraryBook') { libraryBook = el.value; renderReadingList(); }
     if (el.id === 'cxGrammarTopic') openExercise('grammar',el.value);
     if (el.dataset.cword !== undefined) { const id = unit().id; state.words[id] = (state.words[id] || []).filter(w => w !== el.dataset.cword); if (el.checked) state.words[id].push(el.dataset.cword); const ok = save(); if (ok && state.words[id].length === unit().vocabulary.length) markTask('vocab'); refresh(); }
-    if (el.dataset.cquestion !== undefined && currentQuiz) { const d = state.quizDrafts[currentQuiz.key]; if (d.submitted) return; d.answers[Number(el.dataset.cquestion)] = Number(el.value); const ok = save(); $('cxQuizStatus').textContent = `已选择 ${d.answers.filter(Number.isInteger).length} / ${qs.length} 题`+(ok ? ' · 草稿已保存' : ' · 暂未保存'); }
+    if (el.dataset.cquestion !== undefined && currentQuiz) { const qs = questionsFor(unit(),currentQuiz.kind,currentQuiz.variant); const d = state.quizDrafts[currentQuiz.key]; if (d.submitted) return; d.answers[Number(el.dataset.cquestion)] = Number(el.value); const ok = save(); $('cxQuizStatus').textContent = `已选择 ${d.answers.filter(Number.isInteger).length} / ${qs.length} 题`+(ok ? ' · 草稿已保存' : ' · 暂未保存'); }
     if (el.dataset.cwritingCheck !== undefined) {
       const id = unit().id, w = state.writing[id] || (state.writing[id] = {text:$('cxWritingDraft').value,checks:[]});
       const wasComplete = !!w.savedAt;

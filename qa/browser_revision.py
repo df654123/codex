@@ -19,6 +19,7 @@ class BrowserTests(unittest.TestCase):
  def tearDown(self):
   if self.errors:print('PAGE ERRORS:',self.errors)
   self.context.close()
+  self.assertEqual(self.errors,[], 'Uncaught page errors are a release blocker')
  def test_01_ready_and_scope(self):
   self.assertEqual(self.errors,[]);self.assertEqual(self.page.locator('#pv-unit option').count(),10)
   self.assertIn('非完整词表',self.page.locator('#publisherVocabRoot').inner_text())
@@ -71,4 +72,9 @@ class BrowserTests(unittest.TestCase):
   for a in build['assets']+build['downloads']:
    path='index.html' if a['url']=='./' else a['url'].split('?')[0];b=(ROOT/path).read_bytes();self.assertEqual(a['bytes'],len(b),path);self.assertEqual(a['sha256'],hashlib.sha256(b).hexdigest(),path)
   (ROOT/'qa/evidence').mkdir(exist_ok=True);self.page.screenshot(path=str(ROOT/'qa/evidence/publisher-mobile.png'),full_page=True)
+ def test_10_portable_file_origin(self):
+  self.page.goto((ROOT/'downloads/jiangsu-english-offline.html').as_uri()+'#publishers')
+  self.page.wait_for_function('window.PublisherVocab && window.LearningStartupReady')
+  self.assertEqual(self.page.evaluate('ENGLISH_CURRICULUM.version'),'3.9')
+  self.assertEqual(self.errors,[])
 if __name__=='__main__':unittest.main(verbosity=2)

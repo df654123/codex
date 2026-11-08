@@ -22,9 +22,8 @@ const current=()=>D.entries[cursor];
 const saved=()=>{try{const s=localStorage.getItem(KEY);return s?validate(JSON.parse(s)):empty();}catch{throw Error('浏览器记录不可读，本页内容尚未永久保存。');}};
 async function write(event){
  if(busy||window.restoringSnapshot)return false;busy=true;
- if(event)state=merge(state,{schemaVersion:1,events:[event]});
  const perform=()=>{if(blocked)throw Error(warn);state=merge(saved(),state);localStorage.setItem(KEY,JSON.stringify(state));};
- try{if(navigator.locks?.request)await navigator.locks.request(KEY,perform);else perform();warn='';return true;}
+ try{if(event)state=merge(state,{schemaVersion:1,events:[event]});if(navigator.locks?.request)await navigator.locks.request(KEY,perform);else perform();warn='';return true;}
  catch(e){warn=e.message+' 请导出本页备份后再关闭。';return false;}
  finally{busy=false;}
 }
