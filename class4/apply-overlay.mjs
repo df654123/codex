@@ -90,4 +90,9 @@ for (const name of ['server/api/admin/export.get.ts','server/api/stats/records.g
   const content = await fs.readFile(new URL('./overrides/' + name, import.meta.url), 'utf8');
   await fs.writeFile(path.join(root, name), content);
 }
+// Refuse partial per-database restores and inconsistent deployment configuration.
+for (const name of ['server/utils/backup.ts','docker-compose.yml']) {
+  const content = await fs.readFile(new URL('./overrides/' + name, import.meta.url), 'utf8');
+  await fs.writeFile(path.join(root, name), content);
+}
 console.log('Applied verified source fixes and scoped live refresh; no business records modified.');

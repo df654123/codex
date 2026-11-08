@@ -145,6 +145,7 @@ jobs:
           node integration/class4/tests/runtime.mjs upstream 2>&1 | tee evidence/runtime-tests.log
           node integration/class4/tests/mail-compat.mjs upstream 2>&1 | tee evidence/mail-tests.log
           CLASSFIRE_RUNTIME="$PWD/upstream" python3 integration/class4/tests/security-regression.py 2>&1 | tee evidence/security-regression.log
+          CLASSFIRE_ROOT="$PWD/upstream" node --experimental-strip-types --test integration/class4/tests/backup-regression.mjs 2>&1 | tee evidence/backup-regression.log
       - name: Install isolated browser test runner
         run: |
           python3 -m pip install playwright==1.57.0
