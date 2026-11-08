@@ -1,4 +1,4 @@
-"""GPL-3.0-or-later. Add a real browser scenario to the shared isolated fixture."""
+"""GPL-3.0-or-later. Real browsers against the shared isolated fixture."""
 import os, pathlib
 source_path=pathlib.Path(__file__).with_name('http-access.py')
 source=source_path.read_text()
@@ -18,9 +18,13 @@ extra='''    def browser_workflow(self):
                     page=context.new_page()
                     page.on('pageerror',lambda error: errors.append(str(error)))
                     page.goto(BASE+'/login',wait_until='networkidle')
+                    # Usernames are school-scoped. No school selects the super-admin namespace.
+                    page.locator('select').first.select_option('9001')
                     page.locator('input[autocomplete="username"]').fill(name)
                     page.locator('input[type="password"]').first.fill(password)
-                    page.locator('button[type="submit"]').first.click()
+                    with page.expect_response(lambda response: response.url.endswith('/api/auth/login')) as login_response:
+                        page.locator('button[type="submit"]').first.click()
+                    self.assertEqual(login_response.value.status,200,'Teacher sign-in API must succeed')
                     page.wait_for_url('**/admin',timeout=15000)
                     page.goto(BASE+'/admin/scores',wait_until='networkidle')
                     expect(page.get_by_role('heading',name='积分管理',exact=True)).to_be_visible()
@@ -36,6 +40,13 @@ extra='''    def browser_workflow(self):
                 expect(b.get_by_text('browser-verified-observation',exact=True)).to_be_visible()
                 self.assertNotIn('qa_student_other',b.locator('body').inner_text())
                 self.assertEqual(errors,[], 'Browser runtime errors must not be ignored')
+            except Exception:
+                for index, context in enumerate(contexts):
+                    for page in context.pages:
+                        print('Browser diagnostic',index,'url',page.url,'errors',errors)
+                        # Test-only synthetic data; never export cookies, passwords or headers.
+                        print(page.locator('body').inner_text()[:3500])
+                raise
             finally:
                 for context in contexts: context.close()
                 browser.close()
