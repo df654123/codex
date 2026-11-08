@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { prepareLiveChanges } from './apply-live.mjs';
+import { applyOffline } from './apply-offline.mjs';
 const root = path.resolve(process.argv[2] || 'upstream');
 const hashes = {
   'nuxt.config.ts': '3748e33a79d9489fc393d5f486f2266f16d6e04c5b37c169cebe91a0b6fd83f2',
@@ -147,4 +148,5 @@ const successMarker="    if (data.success) {\n      operationResult.value";
 if(scoresPage.split(successMarker).length!==2)throw new Error('Score success anchor mismatch');
 scoresPage=scoresPage.replace(successMarker,"    if (data.success) {\n      localStorage.removeItem(intent.storageKey)\n      operationResult.value");
 await fs.writeFile(scoresPagePath,scoresPage);
+await applyOffline(root);
 console.log('Applied verified source fixes and scoped live refresh; no business records modified.');

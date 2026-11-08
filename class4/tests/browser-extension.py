@@ -42,6 +42,21 @@ extra='''    def browser_workflow(self):
                 print('Measured automatic update seconds:',round(time.monotonic()-started,3))
                 expect(b.get_by_placeholder('请输入操作备注...')).to_have_value('preserve-unsubmitted-draft')
                 self.assertNotIn('qa_student_other',b.locator('body').inner_text())
+                # Simulate failed internet transport after a local record has been queued.
+                a.on('dialog', lambda dialog: dialog.accept())
+                a.get_by_label('在个人设备开启本机待传暂存').check()
+                a.route('**/api/scores/add', lambda route: route.abort())
+                a.get_by_placeholder('请输入操作备注...').fill('synthetic-network-reconnect-queue')
+                a.get_by_role('button',name='为 1 名用户 加1 分',exact=True).click()
+                expect(a.get_by_text('已存本机，尚未云端确认',exact=False)).to_be_visible(timeout=10000)
+                expect(a.get_by_text('本机待传 1 条',exact=False)).to_be_visible(timeout=10000)
+                # Reload after connectivity returns: queue must survive and upload with the same operation ID.
+                a.unroute('**/api/scores/add')
+                a.reload(wait_until='networkidle')
+                expect(a.get_by_text('本机待传记录已由服务器确认',exact=False)).to_be_visible(timeout=20000)
+                b.reload(wait_until='networkidle')
+                expect(b.get_by_text('synthetic-network-reconnect-queue',exact=True)).to_be_visible(timeout=10000)
+
                 self.assertEqual(errors,[], 'Browser runtime errors must not be ignored')
             except Exception:
                 for index, context in enumerate(contexts):
