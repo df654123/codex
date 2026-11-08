@@ -84,4 +84,10 @@ export default defineEventHandler(async (event) => {
 })
 `;
 for (const [name, content] of Object.entries(changes)) await fs.writeFile(path.join(root, name), content);
+// Apply the source-reviewed authorization and daily-date corrections.
+for (const name of ['server/api/admin/export.get.ts','server/api/stats/records.get.ts',
+  'server/api/student/logs.get.ts','server/utils/auth.ts']) {
+  const content = await fs.readFile(new URL('./overrides/' + name, import.meta.url), 'utf8');
+  await fs.writeFile(path.join(root, name), content);
+}
 console.log('Applied verified source fixes and scoped live refresh; no business records modified.');
