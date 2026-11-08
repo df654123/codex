@@ -143,11 +143,8 @@ scoresPage=scoresPage.replace(target,`    const payload = {
       body: { ...payload, operationId: intent.operationId },
       query,
     })`);
-const successMarker="    if (data.success) {
-      operationResult.value";
+const successMarker="    if (data.success) {\n      operationResult.value";
 if(scoresPage.split(successMarker).length!==2)throw new Error('Score success anchor mismatch');
-scoresPage=scoresPage.replace(successMarker,"    if (data.success) {
-      localStorage.removeItem(intent.storageKey)
-      operationResult.value");
+scoresPage=scoresPage.replace(successMarker,"    if (data.success) {\n      localStorage.removeItem(intent.storageKey)\n      operationResult.value");
 await fs.writeFile(scoresPagePath,scoresPage);
 console.log('Applied verified source fixes and scoped live refresh; no business records modified.');
