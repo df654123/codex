@@ -1,0 +1,38 @@
+name: WorkBuddy public access and privacy gate
+on:
+  push:
+    branches:
+      - 'class4/workbuddy-anonymous-audit-20261109'
+    paths:
+      - '.github/workflows/workbuddy-public-audit.yml'
+      - 'qa/workbuddy/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  anonymous:
+    name: Independent no-login browser audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated browser runner
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Run non-destructive public entry audit
+        env:
+          WORKBUDDY_URL: https://class-workbench-08726.app.workbuddy.host/es5.html
+          AUDIT_RESULT_PATH: audit-result.json
+        run: python qa/workbuddy/public_access_audit.py
+      - name: Preserve flags only, never screenshots or school data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbuddy-public-access-summary
+          path: audit-result.json
+          if-no-files-found: warn
+          retention-days: 7
